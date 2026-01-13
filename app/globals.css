@@ -24,3 +24,37 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* ====== PDF / Print Export ====== */
+@media print {
+  /* Hide everything except the report */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Remove background and padding */
+  body {
+    background: white !important;
+  }
+
+  /* Make the report fill the page cleanly */
+  .print-report {
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Avoid weird page breaks inside sections */
+  section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  textarea {
+    border: none !important;
+    outline: none !important;
+  }
+
+  /* Remove URL/footer junk from some browsers */
+  @page {
+    margin: 12mm;
+  }
+}
