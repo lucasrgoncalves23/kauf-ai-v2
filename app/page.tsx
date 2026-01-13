@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 
 type ProgramKey =
   | "Sono"
@@ -98,13 +98,29 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-function FieldRow({ k, v }: { k: string; v: string }) {
+function EditableField({
+  label,
+  value,
+  onChange,
+  placeholder
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
   return (
-    <div className="flex items-start justify-between gap-4 py-1.5">
-      <div className="text-[11px] tracking-[0.14em] uppercase text-slate-400">
-        {k}
+    <div className="flex items-center justify-between gap-2 py-1.5">
+      <div className="text-[10px] tracking-[0.14em] uppercase text-slate-400 whitespace-nowrap">
+        {label}
       </div>
-      <div className="text-[13px] text-slate-800 text-right font-medium">{v}</div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-24 text-[12px] text-slate-800 text-right font-medium bg-white border border-slate-200 rounded px-2 py-0.5 outline-none focus:border-slate-300 placeholder:text-slate-300"
+      />
     </div>
   );
 }
@@ -251,10 +267,22 @@ export default function Home() {
         pages: data.numPages || 1,
       });
 
-      setToast({
-        message: `PDF importado: ${data.numPages} página(s), ${data.text?.length || 0} caracteres`,
-        type: "success"
-      });
+      // Try to extract patient data from PDF text
+      if (data.text) {
+        const extracted = parsePatientDataFromText(data.text);
+        if (Object.keys(extracted).length > 0) {
+          setPatientData(prev => ({ ...prev, ...extracted }));
+          setToast({
+            message: `PDF importado: ${Object.keys(extracted).length} campos extraídos`,
+            type: "success"
+          });
+        } else {
+          setToast({
+            message: `PDF importado: ${data.numPages} página(s) - preencha os dados manualmente`,
+            type: "info"
+          });
+        }
+      }
 
       console.log("Extracted text:", data.text);
     } catch (err) {
@@ -266,19 +294,59 @@ export default function Home() {
     }
   }
 
-  const snapshot = useMemo(
-    () => ({
-      age: "47",
-      sex: "M",
-      height: "178 cm",
-      weight: "91 kg",
-      objective: "Fat loss + energy restoration",
-      primaryRisk: "Metabolic rigidity",
-      discipline: "7 / 10",
-      phase: "B",
-    }),
-    []
-  );
+  // Patient Snapshot - editable state (can be auto-filled from PDF)
+  const [patientData, setPatientData] = useState({
+    age: "",
+    sex: "",
+    height: "",
+    weight: "",
+    objective: "",
+    primaryRisk: "",
+    discipline: "",
+    phase: "",
+  });
+
+  // Helper to update individual patient fields
+  function updatePatientField(field: keyof typeof patientData, value: string) {
+    setPatientData(prev => ({ ...prev, [field]: value }));
+  }
+
+  // Parse patient data from PDF text (simple pattern matching)
+  function parsePatientDataFromText(text: string) {
+    const extracted: Partial<typeof patientData> = {};
+
+    // Age patterns: "Idade: 47", "Age: 47", "47 anos"
+    const ageMatch = text.match(/(?:idade|age)[:\s]*(\d+)/i) || text.match(/(\d+)\s*anos/i);
+    if (ageMatch) extracted.age = ageMatch[1];
+
+    // Sex patterns: "Sexo: M", "Sex: Male", "Masculino"
+    const sexMatch = text.match(/(?:sexo|sex|gênero|gender)[:\s]*(m|f|masculino|feminino|male|female)/i);
+    if (sexMatch) {
+      const val = sexMatch[1].toLowerCase();
+      extracted.sex = val.startsWith('m') ? 'M' : 'F';
+    }
+
+    // Height patterns: "Altura: 178cm", "Height: 1.78m"
+    const heightMatch = text.match(/(?:altura|height)[:\s]*(\d+(?:[.,]\d+)?)\s*(cm|m)?/i);
+    if (heightMatch) {
+      let val = heightMatch[1].replace(',', '.');
+      const unit = heightMatch[2]?.toLowerCase() || 'cm';
+      if (unit === 'm' && parseFloat(val) < 3) val = String(Math.round(parseFloat(val) * 100));
+      extracted.height = `${val} cm`;
+    }
+
+    // Weight patterns: "Peso: 91kg", "Weight: 91"
+    const weightMatch = text.match(/(?:peso|weight)[:\s]*(\d+(?:[.,]\d+)?)\s*(kg)?/i);
+    if (weightMatch) {
+      extracted.weight = `${weightMatch[1].replace(',', '.')} kg`;
+    }
+
+    // Objective patterns
+    const objMatch = text.match(/(?:objetivo|objective|queixa|complaint)[:\s]*([^\n]{5,50})/i);
+    if (objMatch) extracted.objective = objMatch[1].trim();
+
+    return extracted;
+  }
 
   const [integrativeDx, setIntegrativeDx] = useState("");
   const [primaryBottleneck, setPrimaryBottleneck] = useState("");
@@ -349,34 +417,42 @@ export default function Home() {
         <div className="grid grid-cols-[280px_1fr_300px] gap-6">
 
           {/* LEFT: Patient Snapshot */}
-          <aside className="no-print sticky top-6 h-[calc(100vh-48px)] rounded-xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-sm">
+          <aside className="no-print sticky top-6 h-[calc(100vh-48px)] rounded-xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-sm overflow-y-auto">
             <SectionLabel>Patient Snapshot</SectionLabel>
 
-            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/50 p-4">
-              <FieldRow k="Age" v={snapshot.age} />
-              <FieldRow k="Sex" v={snapshot.sex} />
-              <FieldRow k="Height" v={snapshot.height} />
-              <FieldRow k="Weight" v={snapshot.weight} />
+            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+              <EditableField label="Age" value={patientData.age} onChange={(v) => updatePatientField("age", v)} placeholder="Ex: 47" />
+              <EditableField label="Sex" value={patientData.sex} onChange={(v) => updatePatientField("sex", v)} placeholder="M / F" />
+              <EditableField label="Height" value={patientData.height} onChange={(v) => updatePatientField("height", v)} placeholder="Ex: 178 cm" />
+              <EditableField label="Weight" value={patientData.weight} onChange={(v) => updatePatientField("weight", v)} placeholder="Ex: 91 kg" />
 
               <div className="my-3 border-t border-slate-200/60" />
 
               <div className="text-[10px] tracking-[0.14em] uppercase text-slate-400 mb-1">
                 Objective
               </div>
-              <div className="text-[13px] text-slate-700 font-medium">
-                {snapshot.objective}
-              </div>
+              <input
+                type="text"
+                value={patientData.objective}
+                onChange={(e) => updatePatientField("objective", e.target.value)}
+                placeholder="Ex: Fat loss + energy"
+                className="w-full text-[12px] text-slate-700 font-medium bg-white border border-slate-200 rounded px-2 py-1 outline-none focus:border-slate-300"
+              />
 
-              <div className="mt-4 text-[10px] tracking-[0.14em] uppercase text-slate-400 mb-1">
+              <div className="mt-3 text-[10px] tracking-[0.14em] uppercase text-slate-400 mb-1">
                 Primary Biological Risk
               </div>
-              <div className="text-[13px] text-slate-700 font-medium">
-                {snapshot.primaryRisk}
-              </div>
+              <input
+                type="text"
+                value={patientData.primaryRisk}
+                onChange={(e) => updatePatientField("primaryRisk", e.target.value)}
+                placeholder="Ex: Metabolic rigidity"
+                className="w-full text-[12px] text-slate-700 font-medium bg-white border border-slate-200 rounded px-2 py-1 outline-none focus:border-slate-300"
+              />
 
               <div className="my-3 border-t border-slate-200/60" />
-              <FieldRow k="Discipline" v={snapshot.discipline} />
-              <FieldRow k="Active Phase" v={snapshot.phase} />
+              <EditableField label="Discipline" value={patientData.discipline} onChange={(v) => updatePatientField("discipline", v)} placeholder="Ex: 7 / 10" />
+              <EditableField label="Active Phase" value={patientData.phase} onChange={(v) => updatePatientField("phase", v)} placeholder="A / B / C" />
             </div>
 
             <div className="mt-6">
