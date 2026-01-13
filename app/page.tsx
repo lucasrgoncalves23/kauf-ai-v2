@@ -302,6 +302,38 @@ export default function Home() {
     { module: string; reason: string }[]
   >([]);
 
+  // API Key state with localStorage persistence
+  const [apiKey, setApiKey] = useState<string>("");
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<"none" | "saved" | "invalid">("none");
+
+  // Load API key from localStorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem("kauf-ai-api-key");
+    if (savedKey) {
+      setApiKey(savedKey);
+      setApiKeyStatus("saved");
+    }
+  }, []);
+
+  function handleSaveApiKey() {
+    if (apiKey.trim().length < 10) {
+      setToast({ message: "API key inválida (muito curta)", type: "error" });
+      setApiKeyStatus("invalid");
+      return;
+    }
+    localStorage.setItem("kauf-ai-api-key", apiKey.trim());
+    setApiKeyStatus("saved");
+    setToast({ message: "API key salva com sucesso", type: "success" });
+  }
+
+  function handleClearApiKey() {
+    localStorage.removeItem("kauf-ai-api-key");
+    setApiKey("");
+    setApiKeyStatus("none");
+    setToast({ message: "API key removida", type: "info" });
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Toast Notification */}
@@ -490,7 +522,56 @@ export default function Home() {
           </main>
 
           {/* RIGHT: System Status */}
-          <aside className="no-print sticky top-6 h-[calc(100vh-48px)] rounded-xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-sm">
+          <aside className="no-print sticky top-6 h-[calc(100vh-48px)] rounded-xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-sm overflow-y-auto">
+            {/* API Key Section */}
+            <div className="mb-6">
+              <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wide mb-3">
+                API Configuration
+              </h3>
+              <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`w-2 h-2 rounded-full ${apiKeyStatus === "saved" ? "bg-emerald-400" : apiKeyStatus === "invalid" ? "bg-red-400" : "bg-slate-300"}`} />
+                  <span className="text-[11px] text-slate-500">
+                    {apiKeyStatus === "saved" ? "API key configurada" : apiKeyStatus === "invalid" ? "Key inválida" : "Não configurada"}
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full text-[12px] px-3 py-2 pr-8 rounded border border-slate-200 bg-white outline-none focus:border-slate-300 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px]"
+                    aria-label={showApiKey ? "Ocultar API key" : "Mostrar API key"}
+                  >
+                    {showApiKey ? "●●●" : "👁"}
+                  </button>
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveApiKey}
+                    className="flex-1 text-[11px] px-2 py-1.5 rounded bg-slate-800 text-white hover:bg-slate-700 transition-colors"
+                  >
+                    Salvar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearApiKey}
+                    className="text-[11px] px-2 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* System Alerts */}
             <div className="flex items-center gap-2 mb-4">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wide">
