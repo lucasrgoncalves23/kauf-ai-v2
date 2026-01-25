@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
+import pdf from "pdf-parse";
 import { Buffer } from "buffer";
-import { createRequire } from "module";
 
 export const runtime = "nodejs";
-
-const require = createRequire(import.meta.url);
-
-// IMPORTANT: import the real parser (not the demo entry)
-const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 
 export async function POST(req: Request) {
   try {
@@ -24,7 +19,7 @@ export async function POST(req: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const result = await pdfParse(buffer);
+    const result = await pdf(buffer);
     const text = (result?.text ?? "").trim();
 
     return NextResponse.json({

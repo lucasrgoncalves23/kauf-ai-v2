@@ -1,8 +1,6 @@
 // app/lib/engine.ts
 import type { ClinicalInput, Phase } from "@/app/types/clinical";
-
-import { PHASE_RULES, PROGRAM_BLOCKS, KPI_TEMPLATE } from "@/app/lib/kaufmannSpec";
-
+import { PHASE_RULES } from "@/app/lib/kaufmannSpec";
 
 export type BlockedModule = "Hormonal" | "Peptídeos" | "Metabolismo / GLP-1";
 
@@ -10,6 +8,15 @@ export type EngineDecision = {
   phase: Phase;
   blocked: { module: BlockedModule; reason: string }[];
   alerts: string[];
+
+  // explainability (deterministic)
+  rationale: string[];
+  inputsUsed: {
+    phaseAssumption?: string;
+    chiefComplaint: string;
+    wearable?: ClinicalInput["wearable"];
+    labs?: ClinicalInput["labs"];
+  };
 };
 
 export type GeneratedReport = {
@@ -20,24 +27,34 @@ export type GeneratedReport = {
   kpis: string; // multiline 30/60/90
 };
 
-function decidePhase(input: ClinicalInput): Phase {
-  // If you explicitly set a phase, we respect it for now.
-  if (input.phaseAssumption) return input.phaseAssumption;
+function decidePhase(input: ClinicalInput): { phase: Phase; rationale: string[] } {
+  const rationale: string[] = [];
 
-  // Minimal observed pattern: autonomic instability => Phase A
+  // 1) Explicit override wins
+  if (input.phaseAssumption) {
+    rationale.push(`Phase override provided: "${input.phaseAssumption}"`);
+    return { phase: input.phaseAssumption, rationale };
+  }
+
+  // 2) Minimal observed pattern: autonomic instability => Phase A
   const hrvDown = input.wearable?.hrvTrend === "down";
   const rhrUp = input.wearable?.rhrTrend === "up";
-  if (hrvDown && rhrUp) return "A";
 
-  // Default conservative if unknown (keeps advanced tools locked)
-  return "B";
+  if (hrvDown && rhrUp) {
+    rationale.push("Wearable pattern: HRV trend down + RHR trend up → Phase A (instability)");
+    return { phase: "A", rationale };
+  }
+
+  // 3) Default conservative if unknown (keeps advanced tools locked)
+  rationale.push("No explicit phase override and no instability pattern detected → default Phase B (conservative)");
+  return { phase: "B", rationale };
 }
 
 export function runEngine(input: ClinicalInput): {
   decision: EngineDecision;
   report: GeneratedReport;
 } {
-  const phase = decidePhase(input);
+  const { phase, rationale } = decidePhase(input);
 
   const alerts: string[] = [];
   const blocked: { module: BlockedModule; reason: string }[] = [];
@@ -48,18 +65,20 @@ export function runEngine(input: ClinicalInput): {
   if (hrvDown) alerts.push("HRV em queda (tendência)");
   if (rhrUp) alerts.push("RHR em elevação (tendência)");
 
-const rules = PHASE_RULES[phase];
+  const rules = PHASE_RULES[phase];
 
-const maybeBlock = (name: string, reason: string) => {
-  if (name === "Hormonal") blocked.push({ module: "Hormonal", reason });
-  if (name === "Peptídeos") blocked.push({ module: "Peptídeos", reason });
-  if (name === "Metabolismo / GLP-1") blocked.push({ module: "Metabolismo / GLP-1", reason });
-};
+  const maybeBlock = (name: string, reason: string) => {
+    if (name === "Hormonal") blocked.push({ module: "Hormonal", reason });
+    if (name === "Peptídeos") blocked.push({ module: "Peptídeos", reason });
+    if (name === "Metabolismo / GLP-1")
+      blocked.push({ module: "Metabolismo / GLP-1", reason });
+  };
 
-for (const p of rules.blockedPrograms) {
-  maybeBlock(p, `Bloqueado por fase (${phase}): ${rules.description}`);
-}
-
+  for (const p of rules.blockedPrograms) {
+    const reason = `Bloqueado por fase (${phase}): ${rules.description}`;
+    maybeBlock(p, reason);
+    rationale.push(`Blocked ${p}: ${reason}`);
+  }
 
   // Report: we generate structure + placeholders, not therapies.
   const report: GeneratedReport = {
@@ -77,22 +96,36 @@ for (const p of rules.blockedPrograms) {
         ? "Camada 1 — Base Biológica (ATIVA)\nCamada 2 — Performance/Metabolismo (ATIVA)\nCamada 3 — Hormonal (CONDICIONAL)\nCamada 4 — Recuperação (ATIVA)"
         : "Camada 1 — Base Biológica (MANUTENÇÃO)\nCamada 2 — Performance/Metabolismo (OTIMIZAÇÃO)\nCamada 3 — Hormonal (AJUSTE FINO)\nCamada 4 — Avançada (ATIVA)",
     programas: {
-      "Sono": "",
-      "Nutrição": "",
-      "Exercício": "",
-      "Suplementação": "",
-      "Manipulados": "",
-      "Soroterapia": "",
+      Sono: "",
+      Nutrição: "",
+      Exercício: "",
+      Suplementação: "",
+      Manipulados: "",
+      Soroterapia: "",
       "Metabolismo / GLP-1": "",
-      "Hormonal": blocked.some((b) => b.module === "Hormonal") ? "BLOQUEADO — ver Engine State" : "",
-      "Peptídeos": blocked.some((b) => b.module === "Peptídeos") ? "BLOQUEADO — ver Engine State" : "",
+      Hormonal: blocked.some((b) => b.module === "Hormonal")
+        ? "BLOQUEADO — ver Engine State"
+        : "",
+      Peptídeos: blocked.some((b) => b.module === "Peptídeos")
+        ? "BLOQUEADO — ver Engine State"
+        : "",
     },
-    kpis:
-      "30 dias:\n- \n\n60 dias:\n- \n\n90 dias:\n- ",
+    kpis: "30 dias:\n- \n\n60 dias:\n- \n\n90 dias:\n- ",
   };
 
   return {
-    decision: { phase, blocked, alerts },
+    decision: {
+      phase,
+      blocked,
+      alerts,
+      rationale,
+      inputsUsed: {
+        phaseAssumption: input.phaseAssumption,
+        chiefComplaint: input.base.chiefComplaint,
+        wearable: input.wearable,
+        labs: input.labs,
+      },
+    },
     report,
   };
 }

@@ -232,6 +232,8 @@ function ProgramAccordion({
 export default function Home() {
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isClaudeLoading, setIsClaudeLoading] = useState(false);
+
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [importedData, setImportedData] = useState<{ filename: string; textLength: number; pages: number } | null>(null);
 
@@ -271,7 +273,19 @@ export default function Home() {
       if (data.text) {
         const extracted = parsePatientDataFromText(data.text);
         if (Object.keys(extracted).length > 0) {
-          setPatientData(prev => ({ ...prev, ...extracted }));
+          setPatientData((prev) => ({
+  ...prev,
+  ...extracted,
+  // any objective coming from PDF starts unconfirmed
+  objectiveConfirmed: extracted.objective ? false : prev.objectiveConfirmed,
+}));
+
+await runEngineFromPatientData({
+  ...extracted,
+  // make sure unconfirmed objective DOES NOT drive the engine yet
+  objective: "",
+});
+
           setToast({
             message: `PDF importado: ${Object.keys(extracted).length} campos extraídos`,
             type: "success"
@@ -295,21 +309,153 @@ export default function Home() {
   }
 
   // Patient Snapshot - editable state (can be auto-filled from PDF)
-  const [patientData, setPatientData] = useState({
-    age: "",
-    sex: "",
-    height: "",
-    weight: "",
-    objective: "",
-    primaryRisk: "",
-    discipline: "",
-    phase: "",
-  });
+ const [patientData, setPatientData] = useState({
+  age: "",
+  sex: "",
+  height: "",
+  weight: "",
+  objective: "",
+  objectiveConfirmed: false,
+  primaryRisk: "",
+  discipline: "",
+  phase: "",
+});
+
 
   // Helper to update individual patient fields
   function updatePatientField(field: keyof typeof patientData, value: string) {
     setPatientData(prev => ({ ...prev, [field]: value }));
   }
+async function runEngineFromPatientData(overrides?: Partial<typeof patientData>) {
+  const p = { ...patientData, ...(overrides ?? {}) };
+
+const res = await fetch("/api/generate-report", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ patient: p }),
+});
+
+
+  const data = await res.json();
+
+  console.log("Engine inputsUsed:", data?.meta?.inputsUsed);
+
+
+  if (!res.ok) {
+    console.error("generate-report error:", data);
+    alert("Engine failed. Check console.");
+    return;
+  }
+
+  setEnginePhase(data?.decision?.phase ?? "—");
+  setEngineAlerts(data?.decision?.alerts ?? []);
+  setEngineBlocked(data?.decision?.blocked ?? []);
+  setEngineRationale(data?.decision?.rationale ?? []);
+
+
+  setIntegrativeDx(data?.report?.diagnosticoIntegrativo ?? "");
+  setPrimaryBottleneck(data?.report?.gargaloPrimario ?? "");
+  setActiveLayers(data?.report?.camadasAtivas ?? "");
+
+  const programas = data?.report?.programas ?? {};
+  setProgramText((prev) => {
+    const next = { ...prev };
+    for (const key of Object.keys(next) as ProgramKey[]) {
+      if (typeof programas[key] === "string") next[key] = programas[key];
+    }
+    return next;
+  });
+
+  setKpis(data?.report?.kpis ?? "");
+}
+async function fillWithClaude() {
+  
+  const timeoutMs = 35000;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+
+  try {
+    setIsClaudeLoading(true);
+
+    // 1) Get fresh engine output (truth layer) from current snapshot
+    const p = { ...patientData };
+
+    const res1 = await fetch("/api/generate-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patient: p }),
+    });
+
+    const data1 = await res1.json();
+
+    if (!res1.ok) {
+      console.error("generate-report failed:", data1);
+      setToast({ message: "Engine falhou. Veja console.", type: "error" });
+      return;
+    }
+
+    // 2) Ask Claude to fill the narrative (writing layer)
+    const res2 = await fetch("/api/rewrite-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+  patient: p,
+  decision: data1.decision,
+  report: data1.report,
+}),
+
+    });
+
+    const data2 = await res2.json();
+
+    if (!res2.ok) {
+      console.error("rewrite-report failed:", data2);
+      setToast({ message: "Claude falhou. Veja console.", type: "error" });
+      return;
+    }
+
+    const filled = data2?.filled;
+
+    // 3) Apply filled content into UI
+    setIntegrativeDx(filled?.diagnosticoIntegrativo ?? "");
+    setPrimaryBottleneck(filled?.gargaloPrimario ?? "");
+    setActiveLayers(filled?.camadasAtivas ?? "");
+    setKpis(filled?.kpis ?? "");
+
+    const programas = filled?.programas ?? {};
+    setProgramText((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next) as ProgramKey[]) {
+        if (typeof programas[key] === "string") next[key] = programas[key];
+      }
+      return next;
+    });
+
+    setToast({ message: "Claude preencheu o relatório.", type: "success" });
+  } catch (err: any) {
+  const aborted = err?.name === "AbortError";
+  console.error(err);
+  setToast({
+    message: aborted
+      ? `Claude demorou > ${timeoutMs}ms (timeout).`
+      : "Erro inesperado no Claude.",
+    type: "error",
+  });
+} finally {
+  clearTimeout(t);
+  setIsClaudeLoading(false);
+}
+
+}
+
+useEffect(() => {
+  // don't run until there's at least *something* meaningful
+  if (!patientData.objective && !patientData.phase) return;
+
+  runEngineFromPatientData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [patientData]);
 
   // Parse patient data from PDF text (simple pattern matching)
   function parsePatientDataFromText(text: string) {
@@ -369,6 +515,7 @@ export default function Home() {
   const [engineBlocked, setEngineBlocked] = useState<
     { module: string; reason: string }[]
   >([]);
+const [engineRationale, setEngineRationale] = useState<string[]>([]);
 
   // API Key state with localStorage persistence
   const [apiKey, setApiKey] = useState<string>("");
@@ -434,7 +581,11 @@ export default function Home() {
               <input
                 type="text"
                 value={patientData.objective}
-                onChange={(e) => updatePatientField("objective", e.target.value)}
+                onChange={(e) => {
+  updatePatientField("objective", e.target.value);
+  setPatientData((prev) => ({ ...prev, objectiveConfirmed: true }));
+}}
+
                 placeholder="Ex: Fat loss + energy"
                 className="w-full text-[12px] text-slate-700 font-medium bg-white border border-slate-200 rounded px-2 py-1 outline-none focus:border-slate-300"
               />
@@ -529,19 +680,33 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Export Button */}
-                <div className="no-print">
-                  <button
-                    type="button"
-                    onClick={exportPDF}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-150 shadow-sm"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    <span>Export PDF</span>
-                  </button>
-                </div>
+               {/* Export Button */}
+<div className="no-print flex justify-end gap-2">
+  <button
+    type="button"
+    onClick={() => runEngineFromPatientData()}
+    className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50"
+  >
+    Run Engine
+  </button>
+<button
+  type="button"
+  onClick={fillWithClaude}
+  disabled={isClaudeLoading}
+  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
+>
+  {isClaudeLoading ? "Filling..." : "Fill with Claude"}
+</button>
+
+  <button
+    type="button"
+    onClick={exportPDF}
+    className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50"
+  >
+    Export PDF
+  </button>
+</div>
+
               </div>
             </div>
 
@@ -694,6 +859,24 @@ export default function Home() {
                     ))}
                   </div>
                 )}
+                {engineRationale.length > 0 && (
+  <div className="mt-4 pt-3 border-t border-slate-200">
+    <div className="text-[11px] uppercase text-slate-400 tracking-wide mb-2">
+      Rationale
+    </div>
+    <div className="space-y-2">
+      {engineRationale.map((r, i) => (
+        <div
+          key={i}
+          className="text-[12px] text-slate-600 py-2 px-3 rounded bg-slate-100 border border-slate-200"
+        >
+          {r}
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
               </div>
             </div>
           </aside>
