@@ -2,34 +2,31 @@
 
 import { useRef, useState, useEffect } from "react";
 
-type ProgramKey =
-  | "Sono"
-  | "Nutrição"
-  | "Exercício"
-  | "Suplementação"
-  | "Manipulados"
-  | "Soroterapia"
-  | "Metabolismo / GLP-1"
-  | "Hormonal"
-  | "Peptídeos";
+// --- TYPES ---
+type ClinicalData = {
+  anamnese: string;
+  bioimpedancia: string;
+  genetica: string;
+  wearable: string;
+};
 
-const PROGRAMS: ProgramKey[] = [
-  "Sono",
-  "Nutrição",
-  "Exercício",
-  "Suplementação",
-  "Manipulados",
-  "Soroterapia",
-  "Metabolismo / GLP-1",
-  "Hormonal",
-  "Peptídeos",
-];
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
-// Toast notification component
+type EngineStatus = {
+  phase: "A" | "B" | "C";
+  alerts: string[];
+  blocked: string[];
+} | null;
+
+// --- COMPONENTS ---
+
 function Toast({
   message,
   type,
-  onClose
+  onClose,
 }: {
   message: string;
   type: "success" | "error" | "info";
@@ -40,848 +37,524 @@ function Toast({
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const bgColor = type === "success"
-    ? "bg-emerald-50 border-emerald-200"
-    : type === "error"
-    ? "bg-red-50 border-red-200"
-    : "bg-blue-50 border-blue-200";
-
-  const textColor = type === "success"
-    ? "text-emerald-800"
-    : type === "error"
-    ? "text-red-800"
-    : "text-blue-800";
-
-  const icon = type === "success" ? "✓" : type === "error" ? "✕" : "i";
+  const bg = type === "success" ? "bg-emerald-100 text-emerald-800" : type === "error" ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800";
 
   return (
-    <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg ${bgColor} animate-slide-in`}>
-      <span className={`font-bold ${textColor}`}>{icon}</span>
-      <span className={`text-sm ${textColor}`}>{message}</span>
-      <button
-        type="button"
-        onClick={onClose}
-        className={`ml-2 ${textColor} hover:opacity-70 transition-opacity`}
-        aria-label="Fechar notificação"
-      >
-        ✕
-      </button>
+    <div className={`fixed top-6 right-6 z-50 px-4 py-3 rounded shadow-lg ${bg} animate-slide-in font-medium text-sm flex items-center gap-3`}>
+      <span>{message}</span>
+      <button onClick={onClose} className="opacity-50 hover:opacity-100">✕</button>
     </div>
   );
 }
 
-// Loading spinner component
 function Spinner() {
   return (
     <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-      <circle
-        className="opacity-25"
-        cx="12" cy="12" r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
     </svg>
   );
 }
 
 function SectionLabel({ children }: { children: string }) {
   return (
-    <div className="text-[11px] tracking-[0.14em] uppercase text-slate-500 font-medium">
+    <div className="text-[11px] tracking-[0.14em] uppercase text-slate-500 font-medium mb-2">
       {children}
     </div>
   );
 }
 
-function EditableField({
-  label,
+function DataBox({
+  title,
   value,
   onChange,
-  placeholder
+  onImport,
+  isOutput = false,
+  isLoading = false,
+  placeholder,
 }: {
-  label: string;
+  title: string;
   value: string;
   onChange: (v: string) => void;
+  onImport?: (file: File) => void;
+  isOutput?: boolean;
+  isLoading?: boolean;
   placeholder?: string;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImport) onImport(file);
+    if (e.target) e.target.value = "";
+  };
+
   return (
-    <div className="flex items-center justify-between gap-2 py-1.5">
-      <div className="text-[10px] tracking-[0.14em] uppercase text-slate-400 whitespace-nowrap">
-        {label}
+    <div className={`flex flex-col gap-2 rounded-lg border p-4 transition-all duration-200 ${isOutput ? "bg-slate-50/50 border-slate-200" : "bg-white border-slate-200 hover:border-slate-300 shadow-sm"}`}>
+      <div className="flex items-center justify-between">
+        <span className={`text-[10px] font-bold uppercase tracking-wider ${isOutput ? "text-emerald-600" : "text-slate-500"}`}>
+          {title}
+        </span>
+        {!isOutput && onImport && (
+          <div className="no-print">
+            <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+            <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-700 transition-colors px-2 py-1 rounded hover:bg-slate-100">
+              {isLoading ? <Spinner /> : "📎"} Import
+            </button>
+          </div>
+        )}
       </div>
-      <input
-        type="text"
+      <textarea
+        className={`w-full resize-none bg-transparent text-[12px] leading-relaxed outline-none placeholder:text-slate-300 ${isOutput ? "text-slate-800 min-h-[120px]" : "text-slate-600 min-h-[80px]"}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-24 text-[12px] text-slate-800 text-right font-medium bg-white border border-slate-200 rounded px-2 py-0.5 outline-none focus:border-slate-300 placeholder:text-slate-300"
+        placeholder={placeholder || "..."}
       />
     </div>
   );
 }
 
-function StatusRow({
-  label,
-  status,
-  note,
-}: {
-  label: string;
-  status: "ok" | "warn" | "none";
-  note?: string;
-}) {
-  const icon = status === "ok" ? "✓" : status === "warn" ? "!" : "—";
-  const color =
-    status === "ok"
-      ? "text-emerald-500 bg-emerald-50"
-      : status === "warn"
-      ? "text-amber-500 bg-amber-50"
-      : "text-slate-400 bg-slate-100";
-
-  return (
-    <div className="flex items-center justify-between py-2">
-      <div className="text-[12px] text-slate-700">{label}</div>
-      <div className="flex items-center gap-2">
-        {note && (
-          <div className="text-[10px] text-slate-400 whitespace-nowrap">
-            {note}
-          </div>
-        )}
-        <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${color}`}>
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditableBlock({
-  title,
-  value,
-  onChange,
-}: {
-  title: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <section className="pb-6">
-      <div className="flex items-end justify-between gap-4 mb-3">
-        <h2 className="text-[14px] font-semibold text-slate-800">{title}</h2>
-        <div className="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent" />
-      </div>
-
-      <div className="rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
-        <textarea
-          className="w-full resize-none bg-transparent p-4 text-[13px] leading-6 text-slate-700 outline-none placeholder:text-slate-300"
-          rows={3}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Digite aqui..."
-        />
-      </div>
-    </section>
-  );
-}
-
-function ProgramAccordion({
-  name,
-  open,
-  onToggle,
-  value,
-  onChange,
-}: {
-  name: ProgramKey;
-  open: boolean;
-  onToggle: () => void;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="border-b border-slate-100 last:border-b-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full px-4 py-3 text-left flex items-center justify-between hover:bg-slate-50 transition-colors duration-150"
-      >
-        <div className="text-[13px] font-medium text-slate-700">{name}</div>
-        <div className={`text-[10px] text-slate-400 transition-transform duration-200 ${open ? "rotate-90" : ""}`}>
-          ▶
-        </div>
-      </button>
-
-      <div className={`overflow-hidden transition-all duration-200 ${open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}>
-        <div className="px-4 pb-4">
-          <textarea
-            className="w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 text-[13px] leading-5 text-slate-700 outline-none focus:border-slate-300 focus:bg-white transition-colors duration-150"
-            rows={4}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder={`Conteúdo do programa ${name}...`}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
+// --- MAIN PAGE ---
 
 export default function Home() {
-  const pdfInputRef = useRef<HTMLInputElement | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isClaudeLoading, setIsClaudeLoading] = useState(false);
-
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
-  const [importedData, setImportedData] = useState<{ filename: string; textLength: number; pages: number } | null>(null);
+  
+  // DATA STATES
+  const [inputs, setInputs] = useState<ClinicalData>({ anamnese: "", bioimpedancia: "", genetica: "", wearable: "" });
+  const [outputs, setOutputs] = useState<ClinicalData>({ anamnese: "", bioimpedancia: "", genetica: "", wearable: "" });
+  const [patientProfile, setPatientProfile] = useState({ name: "", age: "", sex: "" });
 
-  function exportPDF() {
-    window.print();
-  }
+  // ENGINE STATE
+  const [engineStatus, setEngineStatus] = useState<EngineStatus>(null);
 
-  async function handlePdfImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // UI STATES
+  const [loadingImport, setLoadingImport] = useState<keyof ClinicalData | null>(null);
+  const [isRunningEngine, setIsRunningEngine] = useState(false);
 
-    setIsLoading(true);
+  // CHAT STATES
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll chat
+  useEffect(() => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
+
+  // --- AUTO-PARSE PATIENT INFO ---
+  useEffect(() => {
+    const text = inputs.anamnese;
+    if (!text) return;
+
+    // Regex magic to find Name and Age automatically
+    const nameMatch = text.match(/(?:PACIENTE|NOME)\s*:\s*([^,.\n]+)/i);
+    const ageMatch = text.match(/(?:Idade\s*:\s*|)(\d+)\s*anos/i);
+    const sexMatch = text.match(/(Masculino|Feminino|Homem|Mulher)/i);
+
+    if (nameMatch || ageMatch || sexMatch) {
+      setPatientProfile(prev => ({
+        name: nameMatch ? nameMatch[1].trim() : prev.name,
+        age: ageMatch ? ageMatch[1] : prev.age,
+        sex: sexMatch ? sexMatch[1] : prev.sex,
+      }));
+    }
+  }, [inputs.anamnese]);
+
+  // --- HANDLERS ---
+
+  async function handleImport(file: File, target: keyof ClinicalData) {
+    setLoadingImport(target);
     try {
       const formData = new FormData();
       formData.append("file", file);
-
-      const res = await fetch("/api/import-pdf", {
-        method: "POST",
-        body: formData,
-      });
-
+      const res = await fetch("/api/import-pdf", { method: "POST", body: formData });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setInputs((prev) => ({ ...prev, [target]: data.text }));
+      setToast({ message: "PDF Importado", type: "success" });
+    } catch {
+      setToast({ message: "Erro na importação", type: "error" });
+    } finally {
+      setLoadingImport(null);
+    }
+  }
 
-      if (!res.ok) {
-        setToast({ message: data.error || "Falha ao importar PDF", type: "error" });
-        return;
-      }
+  async function handleRunEngine() {
+    setIsRunningEngine(true);
+    setEngineStatus(null); 
 
-      setImportedData({
-        filename: data.filename,
-        textLength: data.text?.length || 0,
-        pages: data.numPages || 1,
+    try {
+      // --- STEP A: GENERATE THE REPORT ---
+      const response = await fetch("/api/rewrite-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient: inputs, 
+          decision: { phase: "Pending Analysis" },
+          report: {} 
+        }),
       });
 
-      // Try to extract patient data from PDF text
-      if (data.text) {
-        const extracted = parsePatientDataFromText(data.text);
-        if (Object.keys(extracted).length > 0) {
-          setPatientData((prev) => ({
-  ...prev,
-  ...extracted,
-  // any objective coming from PDF starts unconfirmed
-  objectiveConfirmed: extracted.objective ? false : prev.objectiveConfirmed,
-}));
+      const data = await response.json();
 
-await runEngineFromPatientData({
-  ...extracted,
-  // make sure unconfirmed objective DOES NOT drive the engine yet
-  objective: "",
-});
-
-          setToast({
-            message: `PDF importado: ${Object.keys(extracted).length} campos extraídos`,
-            type: "success"
-          });
-        } else {
-          setToast({
-            message: `PDF importado: ${data.numPages} página(s) - preencha os dados manualmente`,
-            type: "info"
-          });
-        }
+      if (!data.ok || !data.filled) {
+        throw new Error(data.error || "Falha na análise do KAI.");
       }
 
-      console.log("Extracted text:", data.text);
-    } catch (err) {
-      console.error("IMPORT-PDF client error:", err);
-      setToast({ message: "Erro de conexão ao importar", type: "error" });
+      // --- STEP B: UPDATE UI ---
+      const result = data.filled;
+
+      setOutputs({
+        anamnese: result.analise_anamnese || "Sem análise.",
+        bioimpedancia: result.analise_bioimpedancia || "Sem análise.",
+        genetica: result.analise_genetica || "Sem análise.",
+        wearable: result.analise_wearable || "Sem análise.",
+      });
+
+      // --- STEP C: DETERMINE PHASE ---
+      const aiText = JSON.stringify(result).toLowerCase();
+      const isPhaseA = aiText.includes("recuperação") || aiText.includes("hrv") || aiText.includes("inflamação");
+
+      setEngineStatus({
+        phase: isPhaseA ? "A" : "B",
+        alerts: isPhaseA ? ["Detectado pelo KAI"] : [],
+        blocked: isPhaseA ? ["Hormonal", "Peptídeos"] : ["Peptídeos"],
+      });
+
+      setToast({ message: "Análise Real do KAI Concluída!", type: "success" });
+
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: "Erro: " + err.message, type: "error" });
     } finally {
-      setIsLoading(false);
-      e.target.value = "";
+      setIsRunningEngine(false);
     }
   }
 
-  // Patient Snapshot - editable state (can be auto-filled from PDF)
- const [patientData, setPatientData] = useState({
-  age: "",
-  sex: "",
-  height: "",
-  weight: "",
-  objective: "",
-  objectiveConfirmed: false,
-  primaryRisk: "",
-  discipline: "",
-  phase: "",
-});
+  async function handleSendMessage() {
+    if (!chatInput.trim()) return;
+    
+    const newUserMsg: ChatMessage = { role: "user", content: chatInput };
+    setChatMessages(prev => [...prev, newUserMsg]);
+    setChatInput("");
+    setIsChatLoading(true);
 
-
-  // Helper to update individual patient fields
-  function updatePatientField(field: keyof typeof patientData, value: string) {
-    setPatientData(prev => ({ ...prev, [field]: value }));
-  }
-async function runEngineFromPatientData(overrides?: Partial<typeof patientData>) {
-  const p = { ...patientData, ...(overrides ?? {}) };
-
-const res = await fetch("/api/generate-report", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ patient: p }),
-});
-
-
-  const data = await res.json();
-
-  console.log("Engine inputsUsed:", data?.meta?.inputsUsed);
-
-
-  if (!res.ok) {
-    console.error("generate-report error:", data);
-    alert("Engine failed. Check console.");
-    return;
-  }
-
-  setEnginePhase(data?.decision?.phase ?? "—");
-  setEngineAlerts(data?.decision?.alerts ?? []);
-  setEngineBlocked(data?.decision?.blocked ?? []);
-  setEngineRationale(data?.decision?.rationale ?? []);
-
-
-  setIntegrativeDx(data?.report?.diagnosticoIntegrativo ?? "");
-  setPrimaryBottleneck(data?.report?.gargaloPrimario ?? "");
-  setActiveLayers(data?.report?.camadasAtivas ?? "");
-
-  const programas = data?.report?.programas ?? {};
-  setProgramText((prev) => {
-    const next = { ...prev };
-    for (const key of Object.keys(next) as ProgramKey[]) {
-      if (typeof programas[key] === "string") next[key] = programas[key];
-    }
-    return next;
-  });
-
-  setKpis(data?.report?.kpis ?? "");
-}
-async function fillWithClaude() {
-  
-  const timeoutMs = 35000;
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-
-
-  try {
-    setIsClaudeLoading(true);
-
-    // 1) Get fresh engine output (truth layer) from current snapshot
-    const p = { ...patientData };
-
-    const res1 = await fetch("/api/generate-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ patient: p }),
-    });
-
-    const data1 = await res1.json();
-
-    if (!res1.ok) {
-      console.error("generate-report failed:", data1);
-      setToast({ message: "Engine falhou. Veja console.", type: "error" });
-      return;
-    }
-
-    // 2) Ask Claude to fill the narrative (writing layer)
-    const res2 = await fetch("/api/rewrite-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-  patient: p,
-  decision: data1.decision,
-  report: data1.report,
-}),
-
-    });
-
-    const data2 = await res2.json();
-
-    if (!res2.ok) {
-      console.error("rewrite-report failed:", data2);
-      setToast({ message: "Claude falhou. Veja console.", type: "error" });
-      return;
-    }
-
-    const filled = data2?.filled;
-
-    // 3) Apply filled content into UI
-    setIntegrativeDx(filled?.diagnosticoIntegrativo ?? "");
-    setPrimaryBottleneck(filled?.gargaloPrimario ?? "");
-    setActiveLayers(filled?.camadasAtivas ?? "");
-    setKpis(filled?.kpis ?? "");
-
-    const programas = filled?.programas ?? {};
-    setProgramText((prev) => {
-      const next = { ...prev };
-      for (const key of Object.keys(next) as ProgramKey[]) {
-        if (typeof programas[key] === "string") next[key] = programas[key];
+    try {
+      const res = await fetch("/api/chat-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [...chatMessages, newUserMsg],
+          context: { inputs, outputs, engineStatus }
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.error) {
+        throw new Error(data.error); 
       }
-      return next;
-    });
 
-    setToast({ message: "Claude preencheu o relatório.", type: "success" });
-  } catch (err: any) {
-  const aborted = err?.name === "AbortError";
-  console.error(err);
-  setToast({
-    message: aborted
-      ? `Claude demorou > ${timeoutMs}ms (timeout).`
-      : "Erro inesperado no Claude.",
-    type: "error",
-  });
-} finally {
-  clearTimeout(t);
-  setIsClaudeLoading(false);
-}
+      let rawText = data.content && data.content[0] ? data.content[0].text : "Erro: Resposta vazia do KAI.";
+      
+      // --- COMMAND PARSING LOGIC ---
+      const commandRegex = /:::COMMAND:::([\s\S]*?):::END:::/;
+      const match = rawText.match(commandRegex);
 
-}
+      if (match) {
+        const jsonStr = match[1];
+        try {
+          const command = JSON.parse(jsonStr);
+          if (command.action === "update_output" && command.field && command.text) {
+            const key = command.field as keyof ClinicalData;
+            if (["anamnese", "bioimpedancia", "genetica", "wearable"].includes(key)) {
+               setOutputs(prev => ({ ...prev, [key]: command.text }));
+               setToast({ message: `KAI atualizou: ${key}`, type: "success" });
+            }
+          }
+        } catch (e) {
+          console.error("Failed to execute KAI command", e);
+        }
+        rawText = rawText.replace(commandRegex, "").trim();
+      }
 
-useEffect(() => {
-  // don't run until there's at least *something* meaningful
-  if (!patientData.objective && !patientData.phase) return;
-
-  runEngineFromPatientData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [patientData]);
-
-  // Parse patient data from PDF text (simple pattern matching)
-  function parsePatientDataFromText(text: string) {
-    const extracted: Partial<typeof patientData> = {};
-
-    // Age patterns: "Idade: 47", "Age: 47", "47 anos"
-    const ageMatch = text.match(/(?:idade|age)[:\s]*(\d+)/i) || text.match(/(\d+)\s*anos/i);
-    if (ageMatch) extracted.age = ageMatch[1];
-
-    // Sex patterns: "Sexo: M", "Sex: Male", "Masculino"
-    const sexMatch = text.match(/(?:sexo|sex|gênero|gender)[:\s]*(m|f|masculino|feminino|male|female)/i);
-    if (sexMatch) {
-      const val = sexMatch[1].toLowerCase();
-      extracted.sex = val.startsWith('m') ? 'M' : 'F';
+      setChatMessages(prev => [...prev, { role: "assistant", content: rawText }]);
+    } catch (err: any) {
+      setChatMessages(prev => [...prev, { 
+        role: "assistant", 
+        content: `❌ Erro: ${err.message || "Falha de conexão"}` 
+      }]);
+    } finally {
+      setIsChatLoading(false);
     }
-
-    // Height patterns: "Altura: 178cm", "Height: 1.78m"
-    const heightMatch = text.match(/(?:altura|height)[:\s]*(\d+(?:[.,]\d+)?)\s*(cm|m)?/i);
-    if (heightMatch) {
-      let val = heightMatch[1].replace(',', '.');
-      const unit = heightMatch[2]?.toLowerCase() || 'cm';
-      if (unit === 'm' && parseFloat(val) < 3) val = String(Math.round(parseFloat(val) * 100));
-      extracted.height = `${val} cm`;
-    }
-
-    // Weight patterns: "Peso: 91kg", "Weight: 91"
-    const weightMatch = text.match(/(?:peso|weight)[:\s]*(\d+(?:[.,]\d+)?)\s*(kg)?/i);
-    if (weightMatch) {
-      extracted.weight = `${weightMatch[1].replace(',', '.')} kg`;
-    }
-
-    // Objective patterns
-    const objMatch = text.match(/(?:objetivo|objective|queixa|complaint)[:\s]*([^\n]{5,50})/i);
-    if (objMatch) extracted.objective = objMatch[1].trim();
-
-    return extracted;
-  }
-
-  const [integrativeDx, setIntegrativeDx] = useState("");
-  const [primaryBottleneck, setPrimaryBottleneck] = useState("");
-  const [activeLayers, setActiveLayers] = useState(
-    "Base\nPerformance\nHormonal\nLongevidade"
-  );
-  const [kpis, setKpis] = useState("30 dias:\n60 dias:\n90 dias:");
-
-  const [openProgram, setOpenProgram] = useState<ProgramKey | null>(null);
-  const [programText, setProgramText] = useState<Record<ProgramKey, string>>(
-    () =>
-      PROGRAMS.reduce((acc, k) => {
-        acc[k] = "";
-        return acc;
-      }, {} as Record<ProgramKey, string>)
-  );
-
-  const [engineAlerts, setEngineAlerts] = useState<string[]>([]);
-  const [enginePhase, setEnginePhase] = useState<string>("—");
-  const [engineBlocked, setEngineBlocked] = useState<
-    { module: string; reason: string }[]
-  >([]);
-const [engineRationale, setEngineRationale] = useState<string[]>([]);
-
-  // API Key state with localStorage persistence
-  const [apiKey, setApiKey] = useState<string>("");
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKeyStatus, setApiKeyStatus] = useState<"none" | "saved" | "invalid">("none");
-
-  // Load API key from localStorage on mount
-  useEffect(() => {
-    const savedKey = localStorage.getItem("kauf-ai-api-key");
-    if (savedKey) {
-      setApiKey(savedKey);
-      setApiKeyStatus("saved");
-    }
-  }, []);
-
-  function handleSaveApiKey() {
-    if (apiKey.trim().length < 10) {
-      setToast({ message: "API key inválida (muito curta)", type: "error" });
-      setApiKeyStatus("invalid");
-      return;
-    }
-    localStorage.setItem("kauf-ai-api-key", apiKey.trim());
-    setApiKeyStatus("saved");
-    setToast({ message: "API key salva com sucesso", type: "success" });
-  }
-
-  function handleClearApiKey() {
-    localStorage.removeItem("kauf-ai-api-key");
-    setApiKey("");
-    setApiKeyStatus("none");
-    setToast({ message: "API key removida", type: "info" });
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Toast Notification */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+    <>
+      {/* --- WEB VIEW (Hides when printing) --- */}
+      <div className="min-h-screen bg-slate-50 text-slate-800 font-sans print:hidden">
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="mx-auto max-w-[1440px] px-6 py-6">
-        <div className="grid grid-cols-[280px_1fr_300px] gap-6">
-
-          {/* LEFT: Patient Snapshot */}
-          <aside className="no-print sticky top-6 h-[calc(100vh-48px)] rounded-xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-sm overflow-y-auto">
-            <SectionLabel>Patient Snapshot</SectionLabel>
-
-            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-              <EditableField label="Age" value={patientData.age} onChange={(v) => updatePatientField("age", v)} placeholder="Ex: 47" />
-              <EditableField label="Sex" value={patientData.sex} onChange={(v) => updatePatientField("sex", v)} placeholder="M / F" />
-              <EditableField label="Height" value={patientData.height} onChange={(v) => updatePatientField("height", v)} placeholder="Ex: 178 cm" />
-              <EditableField label="Weight" value={patientData.weight} onChange={(v) => updatePatientField("weight", v)} placeholder="Ex: 91 kg" />
-
-              <div className="my-3 border-t border-slate-200/60" />
-
-              <div className="text-[10px] tracking-[0.14em] uppercase text-slate-400 mb-1">
-                Objective
-              </div>
-              <input
-                type="text"
-                value={patientData.objective}
-                onChange={(e) => {
-  updatePatientField("objective", e.target.value);
-  setPatientData((prev) => ({ ...prev, objectiveConfirmed: true }));
-}}
-
-                placeholder="Ex: Fat loss + energy"
-                className="w-full text-[12px] text-slate-700 font-medium bg-white border border-slate-200 rounded px-2 py-1 outline-none focus:border-slate-300"
-              />
-
-              <div className="mt-3 text-[10px] tracking-[0.14em] uppercase text-slate-400 mb-1">
-                Primary Biological Risk
-              </div>
-              <input
-                type="text"
-                value={patientData.primaryRisk}
-                onChange={(e) => updatePatientField("primaryRisk", e.target.value)}
-                placeholder="Ex: Metabolic rigidity"
-                className="w-full text-[12px] text-slate-700 font-medium bg-white border border-slate-200 rounded px-2 py-1 outline-none focus:border-slate-300"
-              />
-
-              <div className="my-3 border-t border-slate-200/60" />
-              <EditableField label="Discipline" value={patientData.discipline} onChange={(v) => updatePatientField("discipline", v)} placeholder="Ex: 7 / 10" />
-              <EditableField label="Active Phase" value={patientData.phase} onChange={(v) => updatePatientField("phase", v)} placeholder="A / B / C" />
-            </div>
-
-            <div className="mt-6">
-              <SectionLabel>Data Status</SectionLabel>
-              <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
-                <StatusRow label="Labs" status="ok" />
-                <StatusRow label="Bioimpedance" status="ok" />
-                <StatusRow label="Wearable" status="warn" note="3d ago" />
-                <StatusRow label="Genetics" status="none" />
-              </div>
-            </div>
-
-            {/* Import Status */}
-            {importedData && (
-              <div className="mt-6">
-                <SectionLabel>Last Import</SectionLabel>
-                <div className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
-                  <div className="text-[12px] text-emerald-700 font-medium truncate">
-                    {importedData.filename}
-                  </div>
-                  <div className="text-[11px] text-emerald-600 mt-1">
-                    {importedData.pages} pg · {importedData.textLength} chars
-                  </div>
-                </div>
-              </div>
-            )}
-          </aside>
-
-          {/* CENTER: Cognition Core */}
-          <main className="print-report rounded-xl border border-slate-200/60 bg-white shadow-sm">
-            {/* Header */}
-            <div className="border-b border-slate-100 px-6 py-4">
-              <div className="flex items-center justify-between">
-                {/* Import Button */}
-                <div className="no-print">
-                  <input
-                    ref={pdfInputRef}
-                    type="file"
-                    accept="application/pdf"
-                    className="hidden"
-                    onChange={handlePdfImport}
-                    aria-label="Selecionar arquivo PDF"
-                    title="Selecionar arquivo PDF para importação"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => pdfInputRef.current?.click()}
-                    disabled={isLoading}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-[12px] font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Spinner />
-                        <span>Importing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        <span>Import PDF</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Title */}
-                <div className="text-center">
-                  <h1 className="text-[20px] font-bold text-slate-800 tracking-tight">
-                    Kauf AI
-                  </h1>
-                  <div className="text-[11px] text-slate-400 tracking-wide">
-                    Clinical Intelligence
-                  </div>
-                </div>
-
-               {/* Export Button */}
-<div className="no-print flex justify-end gap-2">
-  <button
-    type="button"
-    onClick={() => runEngineFromPatientData()}
-    className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50"
-  >
-    Run Engine
-  </button>
-<button
-  type="button"
-  onClick={fillWithClaude}
-  disabled={isClaudeLoading}
-  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
->
-  {isClaudeLoading ? "Filling..." : "Fill with Claude"}
-</button>
-
-  <button
-    type="button"
-    onClick={exportPDF}
-    className="rounded-md border border-slate-300 bg-white px-4 py-2 text-[12px] font-semibold text-slate-900 hover:bg-slate-50"
-  >
-    Export PDF
-  </button>
-</div>
-
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="px-6 py-6">
-              <EditableBlock
-                title="Diagnóstico Integrativo"
-                value={integrativeDx}
-                onChange={setIntegrativeDx}
-              />
-
-              <EditableBlock
-                title="Gargalo Primário"
-                value={primaryBottleneck}
-                onChange={setPrimaryBottleneck}
-              />
-
-              <EditableBlock
-                title="Camadas Ativas"
-                value={activeLayers}
-                onChange={setActiveLayers}
-              />
-
-              <section className="pb-6">
-                <div className="flex items-end justify-between gap-4 mb-3">
-                  <h2 className="text-[14px] font-semibold text-slate-800">
-                    Programas
-                  </h2>
-                  <div className="h-px flex-1 bg-gradient-to-r from-slate-200 to-transparent" />
-                </div>
-
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                  {PROGRAMS.map((p) => (
-                    <ProgramAccordion
-                      key={p}
-                      name={p}
-                      open={openProgram === p}
-                      onToggle={() => setOpenProgram(openProgram === p ? null : p)}
-                      value={programText[p]}
-                      onChange={(v) =>
-                        setProgramText((prev) => ({ ...prev, [p]: v }))
-                      }
+        <div className="mx-auto max-w-[1600px] p-6">
+          <div className="grid grid-cols-[280px_1fr_340px] gap-6">
+            
+            {/* LEFT: SNAPSHOT */}
+            <aside className="no-print h-[calc(100vh-48px)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <SectionLabel>Patient Snapshot</SectionLabel>
+              <div className="mt-4 space-y-3 text-sm">
+                <div className="rounded bg-slate-50 p-3 border border-slate-100">
+                   <label className="block text-[10px] uppercase text-slate-400 mb-1">Nome</label>
+                   <input 
+                     className="w-full bg-transparent font-medium outline-none" 
+                     placeholder="Ex: João Silva" 
+                     value={patientProfile.name}
+                     onChange={(e) => setPatientProfile(p => ({...p, name: e.target.value}))}
+                   />
+                 </div>
+                 <div className="flex gap-2">
+                   <div className="flex-1 rounded bg-slate-50 p-3 border border-slate-100">
+                      <label className="block text-[10px] uppercase text-slate-400 mb-1">Idade</label>
+                      <input 
+                        className="w-full bg-transparent font-medium outline-none" 
+                        placeholder="--" 
+                        value={patientProfile.age}
+                        onChange={(e) => setPatientProfile(p => ({...p, age: e.target.value}))}
+                      />
+                   </div>
+                   <div className="flex-1 rounded bg-slate-50 p-3 border border-slate-100">
+                      <label className="block text-[10px] uppercase text-slate-400 mb-1">Sexo</label>
+                      <input 
+                      className="w-full bg-transparent font-medium outline-none capitalize" 
+                      placeholder="--" 
+                      value={patientProfile.sex} 
+                      onChange={(e) => setPatientProfile(p => ({...p, sex: e.target.value}))} 
                     />
+                   </div>
+                 </div>
+              </div>
+              <div className="mt-8">
+                 <SectionLabel>Status de Importação</SectionLabel>
+                 {Object.entries(inputs).map(([k, v]) => (
+                   <div key={k} className="flex justify-between text-xs py-1">
+                     <span className="capitalize text-slate-500">{k}</span>
+                     <span className={v ? "text-emerald-600 font-bold" : "text-slate-300"}>{v ? "●" : "○"}</span>
+                   </div>
+                 ))}
+              </div>
+            </aside>
+
+            {/* CENTER: ENGINE */}
+            <main className="flex flex-col gap-6 h-[calc(100vh-48px)] overflow-y-auto print:h-auto print:overflow-visible">
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm print:hidden">
+                <div>
+                  <h1 className="text-lg font-bold text-slate-800">KAI Engine</h1>
+                  <p className="text-[11px] text-slate-400">Clinical Intelligence v2.0</p>
+                </div>
+                <button onClick={() => window.print()} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-700">
+                  Export PDF
+                </button>
+              </div>
+
+              <section className="no-print space-y-4">
+                <div className="flex items-center gap-2 mb-2"><div className="h-px flex-1 bg-slate-200"/> <span className="text-[10px] font-bold uppercase text-slate-400">Inputs</span> <div className="h-px flex-1 bg-slate-200"/></div>
+                <div className="grid grid-cols-2 gap-4">
+                  {Object.keys(inputs).map((key) => (
+                    <DataBox key={key} title={key} value={inputs[key as keyof ClinicalData]} onChange={(v) => setInputs(p => ({...p, [key]: v}))} onImport={(f) => handleImport(f, key as keyof ClinicalData)} isLoading={loadingImport === key} />
                   ))}
                 </div>
               </section>
 
-              <EditableBlock
-                title="KPIs + Checkpoints (30 / 60 / 90 dias)"
-                value={kpis}
-                onChange={setKpis}
-              />
-            </div>
-          </main>
-
-          {/* RIGHT: System Status */}
-          <aside className="no-print sticky top-6 h-[calc(100vh-48px)] rounded-xl border border-slate-200/60 bg-white/80 backdrop-blur-sm p-5 shadow-sm overflow-y-auto">
-            {/* API Key Section */}
-            <div className="mb-6">
-              <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wide mb-3">
-                API Configuration
-              </h3>
-              <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className={`w-2 h-2 rounded-full ${apiKeyStatus === "saved" ? "bg-emerald-400" : apiKeyStatus === "invalid" ? "bg-red-400" : "bg-slate-300"}`} />
-                  <span className="text-[11px] text-slate-500">
-                    {apiKeyStatus === "saved" ? "API key configurada" : apiKeyStatus === "invalid" ? "Key inválida" : "Não configurada"}
-                  </span>
-                </div>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? "text" : "password"}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full text-[12px] px-3 py-2 pr-8 rounded border border-slate-200 bg-white outline-none focus:border-slate-300 transition-colors"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[10px]"
-                    aria-label={showApiKey ? "Ocultar API key" : "Mostrar API key"}
-                  >
-                    {showApiKey ? "●●●" : "👁"}
-                  </button>
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveApiKey}
-                    className="flex-1 text-[11px] px-2 py-1.5 rounded bg-slate-800 text-white hover:bg-slate-700 transition-colors"
-                  >
-                    Salvar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearApiKey}
-                    className="text-[11px] px-2 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-                  >
-                    Limpar
-                  </button>
-                </div>
+              <div className="no-print flex justify-center py-2">
+                <button onClick={handleRunEngine} disabled={isRunningEngine} className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-8 py-3 rounded-full font-bold shadow-lg hover:scale-105 transition-all disabled:opacity-50">
+                  {isRunningEngine ? <Spinner /> : "⚡ Run with KAI"}
+                </button>
               </div>
-            </div>
 
-            {/* System Alerts */}
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wide">
-                System Alerts
-              </h3>
-            </div>
-
-            {engineAlerts.length === 0 ? (
-              <div className="text-[13px] text-slate-400 mb-6 py-3 px-4 rounded-lg bg-slate-50 border border-slate-100">
-                No active alerts
-              </div>
-            ) : (
-              <div className="space-y-2 mb-6">
-                {engineAlerts.map((a, i) => (
-                  <div key={i} className="text-[13px] text-slate-700 py-2 px-3 rounded-lg bg-amber-50 border border-amber-100">
-                    {a}
+              <section className="print-report space-y-4 pb-10">
+                <div className="flex items-center gap-2 mb-2 no-print"><div className="h-px flex-1 bg-slate-200"/> <span className="text-[10px] font-bold uppercase text-emerald-600">Analysis</span> <div className="h-px flex-1 bg-slate-200"/></div>
+                <div className="grid grid-cols-1 gap-6">
+                  <div className="grid grid-cols-2 gap-6">
+                     <DataBox title="Análise: Exames & Anamnese" value={outputs.anamnese} onChange={v => setOutputs(p => ({...p, anamnese: v}))} isOutput />
+                     <DataBox title="Análise: Composição Corporal" value={outputs.bioimpedancia} onChange={v => setOutputs(p => ({...p, bioimpedancia: v}))} isOutput />
                   </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-8">
-              <h3 className="text-[12px] font-semibold text-slate-600 uppercase tracking-wide mb-3">
-                Engine State
-              </h3>
-
-              <div className="rounded-lg bg-slate-50 border border-slate-100 p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] uppercase text-slate-400 tracking-wide">Current Phase</span>
-                  <span className="text-[16px] font-bold text-slate-800">{enginePhase}</span>
-                </div>
-
-                {engineBlocked.length === 0 ? (
-                  <div className="text-[12px] text-slate-400 py-2">
-                    No modules blocked
+                  <div className="grid grid-cols-2 gap-6">
+                     <DataBox title="Análise: Genética" value={outputs.genetica} onChange={v => setOutputs(p => ({...p, genetica: v}))} isOutput />
+                     <DataBox title="Análise: Wearable" value={outputs.wearable} onChange={v => setOutputs(p => ({...p, wearable: v}))} isOutput />
                   </div>
-                ) : (
-                  <div className="space-y-2 mt-3 pt-3 border-t border-slate-200">
-                    {engineBlocked.map((b, i) => (
-                      <div key={i} className="text-[12px] py-2 px-3 rounded bg-red-50 border border-red-100">
-                        <div className="font-medium text-red-700">{b.module}</div>
-                        <div className="text-red-500 text-[11px] mt-0.5">{b.reason}</div>
+                </div>
+              </section>
+            </main>
+
+            {/* RIGHT: KAI ASSISTANT */}
+            <aside className="no-print h-[calc(100vh-48px)] flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+               
+               {/* 1. STATUS PANEL */}
+               <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                  <SectionLabel>Engine Status</SectionLabel>
+                  {engineStatus ? (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-500">Phase</span>
+                        <span className={`text-sm font-bold ${engineStatus.phase === "A" ? "text-amber-600" : "text-emerald-600"}`}>
+                          {engineStatus.phase}
+                        </span>
                       </div>
-                    ))}
+                      {engineStatus.alerts.length > 0 && (
+                        <div className="p-2 bg-amber-50 border border-amber-100 rounded text-[10px] text-amber-700">
+                          {engineStatus.alerts.join(", ")}
+                        </div>
+                      )}
+                      {engineStatus.blocked.length > 0 && (
+                        <div className="p-2 bg-red-50 border border-red-100 rounded text-[10px] text-red-700">
+                          <strong>Blocked:</strong> {engineStatus.blocked.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-slate-400 italic py-2">
+                      Aguardando análise...
+                    </div>
+                  )}
+               </div>
+
+               {/* 2. CHAT PANEL */}
+               <div className="flex-1 flex flex-col min-h-0 bg-white">
+                  <div className="p-3 border-b border-slate-50 flex items-center justify-between">
+                     <h3 className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                       KAI Copilot
+                     </h3>
+                     <span className="text-[9px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full font-medium">BETA</span>
                   </div>
-                )}
-                {engineRationale.length > 0 && (
-  <div className="mt-4 pt-3 border-t border-slate-200">
-    <div className="text-[11px] uppercase text-slate-400 tracking-wide mb-2">
-      Rationale
-    </div>
-    <div className="space-y-2">
-      {engineRationale.map((r, i) => (
-        <div
-          key={i}
-          className="text-[12px] text-slate-600 py-2 px-3 rounded bg-slate-100 border border-slate-200"
-        >
-          {r}
-        </div>
-      ))}
-    </div>
-  </div>
-)}
 
-              </div>
-            </div>
-          </aside>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={chatScrollRef}>
+                     {chatMessages.length === 0 && (
+                       <div className="text-center text-xs text-slate-300 mt-4 space-y-1">
+                         <p>"Por que Fase A?"</p>
+                         <p>"Corrija a genética para..."</p>
+                       </div>
+                     )}
+                     {chatMessages.map((msg, i) => (
+                       <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                          <div className={`max-w-[90%] rounded-lg p-3 text-xs leading-relaxed ${msg.role === "user" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}>
+                             {msg.content}
+                          </div>
+                       </div>
+                     ))}
+                     {isChatLoading && <div className="text-xs text-slate-400 animate-pulse ml-2">KAI está digitando...</div>}
+                  </div>
 
+                  <div className="p-3 border-t border-slate-100">
+                     <div className="flex gap-2">
+                        <input 
+                          className="flex-1 bg-slate-50 rounded-md px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-blue-200 transition-all placeholder:text-slate-400"
+                          placeholder="Comandos ou perguntas..."
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                        />
+                        <button onClick={handleSendMessage} disabled={isChatLoading} className="bg-white border border-slate-200 text-slate-600 px-3 rounded-md hover:bg-slate-50 hover:text-blue-600 transition-colors disabled:opacity-50">
+                          ➤
+                        </button>
+                     </div>
+                  </div>
+               </div>
+            </aside>
+
+          </div>
         </div>
+      </div>
+
+      {/* --- PRINT VIEW (Visible only when printing) --- */}
+      <MedicalReportPrint profile={patientProfile} outputs={outputs} />
+    </>
+  );
+}
+
+// --- PRINT LAYOUT COMPONENT ---
+function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }) {
+  const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+  
+  return (
+    <div className="hidden print:block bg-white text-black p-8 max-w-[210mm] mx-auto min-h-screen">
+      {/* Header */}
+      <div className="flex justify-between items-end border-b-2 border-slate-900 pb-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Relatório Clínico Integrado</h1>
+          <p className="text-sm text-slate-600 mt-1 uppercase tracking-widest font-medium">Kauf Clinical Intelligence</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold text-slate-900">{today}</p>
+          <p className="text-xs text-slate-500">ID: {Math.random().toString(36).slice(2, 8).toUpperCase()}</p>
+        </div>
+      </div>
+
+      {/* Patient Info Card */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-10 grid grid-cols-2 gap-8">
+        <div>
+          <span className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Paciente</span>
+          <span className="block text-xl font-serif font-medium text-slate-900">{profile.name || "Paciente Não Identificado"}</span>
+        </div>
+        <div className="flex gap-12">
+           <div>
+            <span className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Idade</span>
+            <span className="block text-lg font-medium text-slate-800">{profile.age || "--"} anos</span>
+           </div>
+           <div>
+            <span className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Sexo</span>
+            <span className="block text-lg font-medium text-slate-800 capitalize">{profile.sex || "--"}</span>
+           </div>
+        </div>
+      </div>
+
+      {/* Clinical Analysis Body */}
+      <div className="space-y-8 font-serif">
+        
+        <section>
+          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">
+            1. Análise Metabólica & Anamnese
+          </h2>
+          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">
+            {outputs.anamnese || "Nenhuma análise gerada."}
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">
+            2. Composição Corporal
+          </h2>
+          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">
+            {outputs.bioimpedancia || "Nenhuma análise gerada."}
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">
+            3. Genética & Polimorfismos
+          </h2>
+          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">
+            {outputs.genetica || "Nenhuma análise gerada."}
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">
+            4. Modulação Autonômica (Wearables)
+          </h2>
+          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">
+            {outputs.wearable || "Nenhuma análise gerada."}
+          </p>
+        </section>
+
+      </div>
+
+      {/* Professional Footer */}
+      <div className="mt-16 pt-8 border-t border-slate-200 text-center">
+        <p className="text-[10px] text-slate-400 italic">
+          Relatório gerado por inteligência artificial (KAI v2.0). As sugestões terapêuticas devem ser validadas por julgamento clínico humano.
+        </p>
       </div>
     </div>
   );
