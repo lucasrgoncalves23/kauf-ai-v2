@@ -350,7 +350,7 @@ export default function Home() {
             <main className="flex flex-col gap-6 h-[calc(100vh-48px)] overflow-y-auto print:h-auto print:overflow-visible">
               <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm print:hidden">
                 <div>
-                  <h1 className="text-lg font-bold text-slate-800">KAI Engine</h1>
+                  <h1 className="text-lg font-bold text-slate-800">KAI, by Oskar Kaufmann</h1>
                   <p className="text-[11px] text-slate-400">Clinical Intelligence v2.0</p>
                 </div>
                 <button onClick={() => window.print()} className="bg-slate-800 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-700">
@@ -474,8 +474,17 @@ export default function Home() {
 }
 
 // --- PRINT LAYOUT COMPONENT ---
+// --- PRINT LAYOUT COMPONENT (FIXED) ---
 function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }) {
-  const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+  // 1. Set up empty states initially
+  const [dateStr, setDateStr] = useState("");
+  const [reportId, setReportId] = useState("");
+
+  // 2. Only generate the Date and ID once the browser has loaded (Client-Side)
+  useEffect(() => {
+    setDateStr(new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }));
+    setReportId(Math.random().toString(36).slice(2, 8).toUpperCase());
+  }, []);
   
   return (
     <div className="hidden print:block bg-white text-black p-8 max-w-[210mm] mx-auto min-h-screen">
@@ -486,8 +495,9 @@ function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }
           <p className="text-sm text-slate-600 mt-1 uppercase tracking-widest font-medium">Kauf Clinical Intelligence</p>
         </div>
         <div className="text-right">
-          <p className="text-sm font-bold text-slate-900">{today}</p>
-          <p className="text-xs text-slate-500">ID: {Math.random().toString(36).slice(2, 8).toUpperCase()}</p>
+          {/* 3. Display the state variables */}
+          <p className="text-sm font-bold text-slate-900">{dateStr}</p>
+          <p className="text-xs text-slate-500">ID: {reportId}</p>
         </div>
       </div>
 
