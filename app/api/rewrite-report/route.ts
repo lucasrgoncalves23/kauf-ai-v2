@@ -8,198 +8,122 @@ type RewriteRequest = {
   report: Record<string, any>;
 };
 
-// ---------- helpers ----------
-
-function makeRequestId() {
-  return `rw_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-}
-
-function trunc(s: string, n = 1200) {
-  const t = s ?? "";
-  return t.length > n ? t.slice(0, n) + "…(truncated)" : t;
-}
-
-/**
- * Finds the first balanced {...} JSON object in a string.
- * Works even with text before/after.
- */
-function braceScanForObject(input: string): string | null {
-  const str = (input ?? "").trim();
-  if (!str) return null;
-
-  const firstBrace = str.indexOf("{");
-  if (firstBrace === -1) return null;
-
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-
-  for (let i = firstBrace; i < str.length; i++) {
-    const ch = str[i];
-
-    if (inString) {
-      if (escape) {
-        escape = false;
-        continue;
-      }
-      if (ch === "\\") {
-        escape = true;
-        continue;
-      }
-      if (ch === '"') {
-        inString = false;
-        continue;
-      }
-      continue;
-    } else {
-      if (ch === '"') {
-        inString = true;
-        continue;
-      }
-      if (ch === "{") depth++;
-      if (ch === "}") depth--;
-      if (depth === 0) {
-        const candidate = str.slice(firstBrace, i + 1).trim();
-        return candidate.length ? candidate : null;
-      }
-    }
+// ---------- HELPER: TAG PARSER (SAFETY NET) ----------
+function extractSection(text: string, tagName: string): string {
+  if (!text) return "";
+  
+  const startTag = `:::${tagName}_START:::`;
+  const endTag = `:::${tagName}_END:::`;
+  
+  const startIndex = text.indexOf(startTag);
+  if (startIndex === -1) return ""; 
+  
+  const contentStart = startIndex + startTag.length;
+  const endIndex = text.indexOf(endTag, contentStart);
+  
+  // If AI gets cut off (no end tag), return everything it wrote.
+  if (endIndex === -1) {
+    return text.substring(contentStart).trim();
   }
-
-  return null;
+  
+  return text.substring(contentStart, endIndex).trim();
 }
 
-/**
- * If Claude returns "json\n\n" prefix, or returns key/value pairs WITHOUT the opening "{",
- * repair into a proper JSON object string.
- */
-function repairAlmostJson(raw: string): { repaired: string; didRepair: boolean } {
-  let t = (raw ?? "").trim();
-  if (!t) return { repaired: t, didRepair: false };
-
-  // remove leading "json" token sometimes emitted
-  t = t.replace(/^\s*json\s*/i, "").trim();
-
-  // If we already have an object, no repair needed
-  if (t.includes("{")) return { repaired: t, didRepair: false };
-
-  // If it looks like object fields, wrap it
-  // e.g. starts with:  "diagnosticoIntegrativo": "..."
-  const looksLikeFields =
-    /"\s*diagnosticoIntegrativo\s*"\s*:/.test(t) ||
-    /"\s*gargaloPrimario\s*"\s*:/.test(t) ||
-    /"\s*programas\s*"\s*:/.test(t);
-
-  if (!looksLikeFields) return { repaired: t, didRepair: false };
-
-  // If it ends with "}" already, it might only be missing the opening "{"
-  // Otherwise wrap fully.
-  if (t.endsWith("}")) {
-    return { repaired: `{${t}`, didRepair: true };
-  }
-
-  return { repaired: `{${t}}`, didRepair: true };
-}
-
-function extractJsonObjectFromClaudeText(raw: string): { jsonText: string | null; strategy: string } {
-  const text0 = (raw ?? "").trim();
-  if (!text0) return { jsonText: null, strategy: "empty" };
-
-  // 0) Repair common "json\n\n" prefix + missing "{"
-  const { repaired, didRepair } = repairAlmostJson(text0);
-  const text = repaired.trim();
-
-  // 1) Strip ```json ... ``` fences if present
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced?.[1]) {
-    const inside = fenced[1].trim();
-    const repairedInside = repairAlmostJson(inside).repaired.trim();
-
-    const obj = braceScanForObject(repairedInside);
-    if (obj) return { jsonText: obj, strategy: didRepair ? "repair+code_fence+brace_scan" : "code_fence+brace_scan" };
-
-    // If it still doesn't have braces but looks like fields, wrap and return
-    const { repaired: wrapped, didRepair: didRepair2 } = repairAlmostJson(repairedInside);
-    if (didRepair2) return { jsonText: wrapped, strategy: "code_fence+repair_wrap" };
-
-    return { jsonText: null, strategy: "code_fence_not_object" };
-  }
-
-  // 2) Brace scan entire text (handles extra text before/after)
-  const obj = braceScanForObject(text);
-  if (obj) return { jsonText: obj, strategy: didRepair ? "repair+brace_scan" : "brace_scan" };
-
-  // 3) If still no braces but it looks like fields, wrap and return
-  const { repaired: wrapped2, didRepair: didRepair3 } = repairAlmostJson(text0);
-  if (didRepair3) return { jsonText: wrapped2, strategy: "repair_wrap" };
-
-  // 4) Nothing found
-  return { jsonText: null, strategy: didRepair ? "repair_but_not_found" : "not_found" };
-}
-
-// ---------- route ----------
+// ---------- ROUTE ----------
 
 export async function POST(req: Request) {
-  const requestId = makeRequestId();
+  const requestId = `rw_${Date.now()}`;
 
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
     if (!apiKey || apiKey.trim().length < 10) {
-      return NextResponse.json(
-        {
-          ok: false,
-          requestId,
-          error: "Missing ANTHROPIC_API_KEY in .env.local (project root). Restart dev server.",
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Missing API Key" }, { status: 400 });
     }
 
     let body: RewriteRequest;
     try {
       body = (await req.json()) as RewriteRequest;
     } catch {
-      return NextResponse.json(
-        { ok: false, requestId, error: "Invalid JSON body sent to /api/rewrite-report." },
-        { status: 400 }
-      );
+      return NextResponse.json({ ok: false, error: "Invalid JSON body." }, { status: 400 });
     }
 
- const prompt = `
-Você é o KAI (Kauf Clinical Intelligence), um estrategista clínico de elite em Urologia e Medicina de Precisão.
-Sua tarefa NÃO é apenas descrever os dados. Sua tarefa é criar um PLANO DE AÇÃO baseado neles.
+    // --- PROMPT: AGGRESSIVE LENGTH & DEPTH ---
+    const prompt = `
+ATUE COMO: Dr. Oskar Kaufmann, Estrategista Clínico de Elite.
 
-PARA CADA CAMPO (Anamnese, Bioimpedância, Genética, Wearable):
-1.  **Identifique o Sinal:** O que está errado? (Ex: HOMA-IR 2.9)
-2.  **Explique o Mecanismo:** Por que isso está acontecendo? (Ex: Resistência periférica reduzindo SHBG).
-3.  **PRESCREVA A ESTRATÉGIA (CRÍTICO):** O que deve ser feito? (Ex: "Ação: Protocolo de sensibilização insulínica, jejum metabólico e treino glicolítico").
+SUA MISSÃO:
+Gerar um "Relatório de Inteligência Clínica" de altíssima profundidade. O tom deve ser técnico, autoritário e educativo.
 
-REGRAS DE TOM E ESTILO:
-- **Seja Prescritivo:** Use verbos de ação ("Iniciar", "Modular", "Restringir", "Otimizar").
-- **Hard Science:** Use termos técnicos (Mitochondrial Uncoupling, mTOR pathway, Vagal Tone).
-- **Sem "Enrolação":** Vá direto ao ponto. Ex: "Genética COMT Lenta exige suporte à metilação com Metilfolato/B12."
-- **NUNCA apenas descreva.** Se o dado existe, diga como usá-lo clinicamente.
+---
 
-FORMATO DE SAÍDA (JSON ESTRITO):
-Retorne APENAS um JSON válido com estas 4 chaves exatas:
-{
-  "analise_anamnese": "Texto estratégico focado em Bioquímica e Queixas (5-8 linhas)",
-  "analise_bioimpedancia": "Texto estratégico focado em Composição Corporal e Inflamação (5-8 linhas)",
-  "analise_genetica": "Texto estratégico focado em Polimorfismos e Epigenética (5-8 linhas)",
-  "analise_wearable": "Texto estratégico focado em Modulação Autonômica e Sono (5-8 linhas)"
-}
+SEÇÃO 1: ANÁLISE CLÍNICA INTEGRADA (EXTENSA E DETALHADA)
+*Instrução de Tamanho:* Esta seção deve ter NO MÍNIMO 800-1000 palavras.
+Para CADA um dos 4 pilares (Anamnese, Bioimpedância, Genética, Wearables), você deve escrever 3 a 4 PARÁGRAFOS LONGOS.
+
+REGRAS DE ESCRITA:
+1. NÃO RESUMA. Explique a fisiologia por trás de cada dado.
+2. Se o paciente tem MTHFR, não diga apenas "tome metilfolato". Explique o ciclo da homocisteína e o impacto na neuroquímica.
+3. Se o paciente tem gordura visceral, explique a cascata inflamatória (IL-6, TNF-alfa) e o bloqueio do receptor de insulina.
+4. Use prosa narrativa fluida (texto corrido). NÃO use bullet points nesta seção.
+5. Conecte os pontos: "A baixa testosterona vista no exame X é explicada pela privação de sono vista no Wearable Y..."
+
+---
+
+SEÇÃO 2: CONDUTA TERAPÊUTICA (PROTOCOLOS PRÁTICOS)
+Estruture EXATAMENTE com estes 9 cabeçalhos (Use Markdown ##):
+
+1. SONO
+(Higiene do sono, suplementos como Magnésio/Inositol, ajustes de rotina)
+
+2. NUTRIÇÃO
+(Estratégia macro/micro, jejum intermitente se cabível, dieta anti-inflamatória)
+
+3. EXERCÍCIO
+(Tipo de treino ideal: Hipertrofia, HIIT ou Cardio leve baseado no perfil genético/físico)
+
+4. SUPLEMENTAÇÃO
+(Suplementos orais básicos: Creatina, Ômega-3, Multivitamínico, etc.)
+
+5. MANIPULADOS
+(Fórmulas personalizadas com doses exatas. Ex: "Fórmula Mitocondrial: CoQ10 100mg + PQQ 10mg...")
+
+6. SOROTERAPIA
+(Sugestão de "Drips" endovenosos para recuperação ou ativação metabólica)
+
+7. METABOLISMO / GLP-1
+(Uso de análogos de GLP-1 ou sensibilizadores como Metformina/Berberina se indicado)
+
+8. HORMONAL
+(TRT, Gestrinona, Progesterona - Apenas se houver indicação clara nos exames)
+
+9. PEPTÍDEOS
+(BPC-157 para lesões, Ipamorelin para GH, etc - se indicado)
+
+---
+
+FORMATO DE RESPOSTA (OBRIGATÓRIO):
+Use estas tags exatas para que o sistema reconheça o texto:
+
+:::ANALISE_START:::
+(Texto da análise longa aqui...)
+:::ANALISE_END:::
+
+:::CONDUTA_START:::
+(Texto da conduta formatada aqui...)
+:::CONDUTA_END:::
+
+---
 
 DADOS DO PACIENTE:
 ${JSON.stringify(body.patient ?? {}, null, 2)}
 `.trim();
 
-    // ---- timeout so we never hang ----
-    const timeoutMs = Number(process.env.CLAUDE_TIMEOUT_MS ?? 60000);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // 2 minutes timeout to allow for long generation
+    const timer = setTimeout(() => controller.abort(), 120000);
 
     let respText = "";
-    let upstreamStatus = 0;
 
     try {
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -211,125 +135,57 @@ ${JSON.stringify(body.patient ?? {}, null, 2)}
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-5-20250929",
-          max_tokens: 2000,
-          temperature: 0.2,
+          model: "claude-3-haiku-20240307", // BACK TO HAIKU
+          max_tokens: 4096, 
+          temperature: 0.2, 
           messages: [{ role: "user", content: prompt }],
         }),
       });
 
-      upstreamStatus = resp.status;
       respText = await resp.text();
 
       if (!resp.ok) {
-        return NextResponse.json(
-          {
-            ok: false,
-            requestId,
-            error: "Anthropic HTTP error",
-            upstreamStatus,
-            upstreamBody: trunc(respText),
-          },
-          { status: 502 }
-        );
+        console.error("❌ REAL ANTHROPIC ERROR:", respText);
+        return NextResponse.json({ ok: false, error: "Anthropic API Error", details: respText.slice(0, 500) }, { status: 502 });
       }
     } catch (e: any) {
-      const aborted = e?.name === "AbortError";
-      return NextResponse.json(
-        {
-          ok: false,
-          requestId,
-          error: aborted ? `Claude timed out after ${timeoutMs}ms.` : "Failed calling Anthropic.",
-          details: aborted ? undefined : (e?.message ?? String(e)),
-        },
-        { status: aborted ? 504 : 502 }
-      );
+      return NextResponse.json({ ok: false, error: "Connection Error", details: e.message }, { status: 502 });
     } finally {
       clearTimeout(timer);
     }
 
-    // Parse Anthropic wrapper JSON
     let data: any;
     try {
       data = JSON.parse(respText);
     } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          requestId,
-          error: "Anthropic returned non-JSON body.",
-          upstreamStatus,
-          upstreamBody: trunc(respText),
-        },
-        { status: 502 }
-      );
+      return NextResponse.json({ ok: false, error: "Invalid JSON from AI Provider" }, { status: 502 });
     }
 
-    const rawText =
-      data?.content?.[0]?.text ??
-      data?.content?.map?.((c: any) => c?.text).filter(Boolean).join("\n") ??
-      "";
+    const rawText = data.content?.[0]?.text || "";
+    
+    // --- PARSE TAGS ---
+    const analise = extractSection(rawText, "ANALISE");
+    const conduta = extractSection(rawText, "CONDUTA");
 
-    if (!rawText.trim()) {
-      return NextResponse.json(
-        { ok: false, requestId, error: "Claude returned empty text." },
-        { status: 502 }
-      );
+    if (!analise && !conduta) {
+      return NextResponse.json({ 
+          ok: false, 
+          error: "AI failed to generate report sections", 
+          details: rawText.slice(0, 200) 
+      }, { status: 422 });
     }
 
-    // Extract JSON (handles fences + extra text + "json" prefix + missing "{")
-    const { jsonText, strategy } = extractJsonObjectFromClaudeText(rawText);
+    return NextResponse.json({ 
+        ok: true, 
+        requestId, 
+        filled: {
+            analise: analise || "Erro ao gerar Análise.",
+            conduta: conduta || "Erro ao gerar Conduta (Texto interrompido)."
+        } 
+    });
 
-    if (!jsonText) {
-      return NextResponse.json(
-        {
-          ok: false,
-          requestId,
-          error: "Claude output did not contain JSON object.",
-          strategy,
-          rawPreview: trunc(rawText),
-        },
-        { status: 422 }
-      );
-    }
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonText);
-    } catch (err: any) {
-      return NextResponse.json(
-        {
-          ok: false,
-          requestId,
-          error: "Failed to parse Claude JSON.",
-          strategy,
-          parseError: err?.message ?? String(err),
-          rawPreview: trunc(rawText),
-          extractedPreview: trunc(jsonText),
-        },
-        { status: 422 }
-      );
-    }
-
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return NextResponse.json(
-        {
-          ok: false,
-          requestId,
-          error: "Claude JSON parsed but is not an object.",
-          strategy,
-          parsedType: Array.isArray(parsed) ? "array" : typeof parsed,
-          rawPreview: trunc(rawText),
-        },
-        { status: 422 }
-      );
-    }
-
-    return NextResponse.json({ ok: true, requestId, filled: parsed });
   } catch (err: any) {
-    return NextResponse.json(
-      { ok: false, requestId, error: "rewrite-report failed", details: err?.message ?? String(err) },
-      { status: 500 }
-    );
+    console.error("Server Error:", err);
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
 }

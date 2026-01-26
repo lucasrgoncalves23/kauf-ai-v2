@@ -10,6 +10,12 @@ type ClinicalData = {
   wearable: string;
 };
 
+// NEW: Output is strictly these two sections
+type ClinicalOutputs = {
+  analise: string;
+  conduta: string;
+};
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -72,6 +78,7 @@ function DataBox({
   isOutput = false,
   isLoading = false,
   placeholder,
+  minHeight = "min-h-[100px]", // Support for taller boxes
 }: {
   title: string;
   value: string;
@@ -80,6 +87,7 @@ function DataBox({
   isOutput?: boolean;
   isLoading?: boolean;
   placeholder?: string;
+  minHeight?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,7 +97,6 @@ function DataBox({
     if (e.target) e.target.value = "";
   };
 
-  // PREMIUM CARD STYLE
   return (
     <div className={`flex flex-col gap-2 rounded-xl p-5 transition-all duration-300 group
       ${isOutput 
@@ -103,15 +110,16 @@ function DataBox({
         </span>
         {!isOutput && onImport && (
           <div className="no-print">
-            <input type="file" accept="application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+            {/* UPDATED: Accepts PDF, JPG, PNG */}
+            <input type="file" accept="application/pdf, image/jpeg, image/png" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
             <button onClick={() => fileInputRef.current?.click()} disabled={isLoading} className="flex items-center gap-1.5 text-[10px] font-medium text-slate-400 hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-slate-50">
-              {isLoading ? <Spinner /> : "📎 Import PDF"}
+              {isLoading ? <Spinner /> : "📎 Import File"}
             </button>
           </div>
         )}
       </div>
       <textarea
-        className={`w-full resize-none bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-slate-200 ${isOutput ? "text-slate-700 min-h-[120px] font-medium" : "text-slate-600 min-h-[80px]"}`}
+        className={`w-full resize-none bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-slate-200 ${isOutput ? "text-slate-700 font-medium" : "text-slate-600"} ${minHeight}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder || "Paste or type here..."}
@@ -127,17 +135,14 @@ export default function Home() {
   
   // DATA STATES
   const [inputs, setInputs] = useState<ClinicalData>({ anamnese: "", bioimpedancia: "", genetica: "", wearable: "" });
-  const [outputs, setOutputs] = useState<ClinicalData>({ anamnese: "", bioimpedancia: "", genetica: "", wearable: "" });
+  
+  // OUTPUT STATE: Just 2 fields now
+  const [outputs, setOutputs] = useState<ClinicalOutputs>({ analise: "", conduta: "" });
+  
   const [patientProfile, setPatientProfile] = useState({ name: "", age: "", sex: "" });
-
-  // ENGINE STATE
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(null);
-
-  // UI STATES
   const [loadingImport, setLoadingImport] = useState<keyof ClinicalData | null>(null);
   const [isRunningEngine, setIsRunningEngine] = useState(false);
-
-  // CHAT STATES
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -165,21 +170,31 @@ export default function Home() {
     }
   }, [inputs.anamnese]);
 
+  // UPDATED: handleImport now handles PDF and Images
   async function handleImport(file: File, target: keyof ClinicalData) {
     setLoadingImport(target);
     try {
-      if (file.type !== "application/pdf") {
-        setToast({ message: "Por favor, selecione um arquivo PDF", type: "error" });
+      // Validate file type
+      const validTypes = ["application/pdf", "image/jpeg", "image/png"];
+      if (!validTypes.includes(file.type)) {
+        setToast({ message: "Formato inválido. Use PDF, JPG ou PNG.", type: "error" });
         return;
       }
+
       const formData = new FormData();
       formData.append("file", file);
-      setInputs((prev) => ({ ...prev, [target]: "Lendo PDF..." }));
+      
+      // Conditional loading text
+      const statusText = file.type === "application/pdf" ? "Lendo PDF..." : "Lendo Imagem (IA)...";
+      setInputs((prev) => ({ ...prev, [target]: statusText }));
+
       const res = await fetch("/api/import-pdf", { method: "POST", body: formData });
       const data = await res.json();
+      
       if (!res.ok) throw new Error(data.error || "Falha no servidor");
+      
       setInputs((prev) => ({ ...prev, [target]: data.text }));
-      setToast({ message: `PDF de ${target} Importado!`, type: "success" });
+      setToast({ message: `Arquivo importado com sucesso!`, type: "success" });
     } catch (err: any) {
       console.error("Import Error:", err);
       setInputs((prev) => ({ ...prev, [target]: "" })); 
@@ -196,17 +211,15 @@ export default function Home() {
       const response = await fetch("/api/rewrite-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient: inputs, decision: { phase: "Pending Analysis" }, report: {} }),
+        body: JSON.stringify({ patient: inputs, decision: { phase: "Pending Analysis" } }),
       });
       const data = await response.json();
       if (!data.ok || !data.filled) throw new Error(data.error || "Falha na análise do KAI.");
       
       const result = data.filled;
       setOutputs({
-        anamnese: result.analise_anamnese || "Sem análise.",
-        bioimpedancia: result.analise_bioimpedancia || "Sem análise.",
-        genetica: result.analise_genetica || "Sem análise.",
-        wearable: result.analise_wearable || "Sem análise.",
+        analise: result.analise || "Sem análise gerada.",
+        conduta: result.conduta || "Sem conduta gerada.",
       });
 
       const aiText = JSON.stringify(result).toLowerCase();
@@ -253,11 +266,11 @@ export default function Home() {
         try {
           const command = JSON.parse(jsonStr);
           if (command.action === "update_output" && command.field && command.text) {
-            const key = command.field as keyof ClinicalData;
-            if (["anamnese", "bioimpedancia", "genetica", "wearable"].includes(key)) {
-               setOutputs(prev => ({ ...prev, [key]: command.text }));
-               setToast({ message: `KAI atualizou: ${key}`, type: "success" });
-            }
+             const key = command.field as keyof ClinicalOutputs;
+             if (["analise", "conduta"].includes(key)) {
+                setOutputs(prev => ({ ...prev, [key]: command.text }));
+                setToast({ message: `KAI atualizou: ${key}`, type: "success" });
+             }
           }
         } catch (e) { console.error("Failed to execute KAI command", e); }
         rawText = rawText.replace(commandRegex, "").trim();
@@ -275,7 +288,7 @@ export default function Home() {
       <div className="min-h-screen text-slate-800 font-sans print:hidden overflow-hidden relative">
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-        {/* --- MAIN CONTENT (Layer 10) --- */}
+        {/* --- MAIN CONTENT --- */}
         <div className="relative z-10 mx-auto max-w-[1600px] p-6 h-screen flex flex-col">
           <div className="grid grid-cols-[280px_1fr_360px] gap-8 h-full">
             
@@ -321,11 +334,11 @@ export default function Home() {
             <main className="flex flex-col h-full overflow-hidden no-scrollbar">
               <div className="flex items-center justify-between rounded-2xl bg-white border border-slate-100 px-8 py-5 shadow-sm mb-6 print:hidden">
                 <div>
-                  <h1 className="text-xl font-bold text-slate-900 tracking-tight">KAI Clinical Intelligence</h1>
+                  <h1 className="text-xl font-bold text-slate-900 tracking-tight">KAI, by Oskar Kaufmann</h1>
                   <p className="text-[11px] text-slate-400 font-medium tracking-wide mt-0.5">VERSION 2.0 • DR. OSKAR KAUFMANN</p>
                 </div>
                 <button onClick={() => window.print()} className="bg-slate-900 text-white px-5 py-2.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all shadow-lg shadow-slate-200">
-                  Export Report PDF
+                  EXPORTAR PDF
                 </button>
               </div>
 
@@ -333,7 +346,7 @@ export default function Home() {
                 <section className="no-print">
                    <div className="flex items-center gap-3 mb-4">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                      <span className="text-xs font-bold uppercase text-slate-400 tracking-widest">Clinical Inputs</span>
+                      <span className="text-xs font-bold uppercase text-slate-400 tracking-widest">Inputs Clínicos</span>
                    </div>
                    <div className="grid grid-cols-2 gap-4">
                      {Object.keys(inputs).map((key) => (
@@ -344,33 +357,49 @@ export default function Home() {
 
                 <div className="no-print flex justify-center py-4">
                   <button onClick={handleRunEngine} disabled={isRunningEngine} className={`flex items-center gap-3 px-10 py-4 rounded-full font-bold text-sm shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all ${isRunningEngine ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-blue-200"}`}>
-                    {isRunningEngine ? <Spinner /> : <span>⚡ RUN ANALYSIS ENGINE</span>}
+                    {isRunningEngine ? <Spinner /> : <span>⚡ Run with KAI</span>}
                   </button>
                 </div>
 
-                <section className="print-report animate-slide-up">
-                   <div className="flex items-center gap-3 mb-4">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      <span className="text-xs font-bold uppercase text-emerald-600 tracking-widest">AI Generated Assessment</span>
+                {/* --- NEW OUTPUT LAYOUT (2 Massive Windows) --- */}
+                <section className="print-report animate-slide-up space-y-6">
+                   
+                   {/* 1. ANÁLISE INTEGRADA */}
+                   <div>
+                       <div className="flex items-center gap-3 mb-4">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span className="text-xs font-bold uppercase text-emerald-600 tracking-widest">Análise Clínica Integrada</span>
+                       </div>
+                       <DataBox 
+                          title="Tese Fisiológica (2-3 Pages)" 
+                          value={outputs.analise} 
+                          onChange={v => setOutputs(p => ({...p, analise: v}))} 
+                          isOutput 
+                          minHeight="min-h-[600px]" // HUGE BOX
+                       />
                    </div>
-                   <div className="grid grid-cols-1 gap-6">
-                     <div className="grid grid-cols-2 gap-6">
-                        <DataBox title="Análise: Exames & Anamnese" value={outputs.anamnese} onChange={v => setOutputs(p => ({...p, anamnese: v}))} isOutput />
-                        <DataBox title="Análise: Composição Corporal" value={outputs.bioimpedancia} onChange={v => setOutputs(p => ({...p, bioimpedancia: v}))} isOutput />
-                     </div>
-                     <div className="grid grid-cols-2 gap-6">
-                        <DataBox title="Análise: Genética" value={outputs.genetica} onChange={v => setOutputs(p => ({...p, genetica: v}))} isOutput />
-                        <DataBox title="Análise: Wearable" value={outputs.wearable} onChange={v => setOutputs(p => ({...p, wearable: v}))} isOutput />
-                     </div>
+
+                   {/* 2. CONDUTA */}
+                   <div>
+                       <div className="flex items-center gap-3 mb-4">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                          <span className="text-xs font-bold uppercase text-indigo-600 tracking-widest">Conduta & Planejamento</span>
+                       </div>
+                       <DataBox 
+                          title="Plano Terapêutico" 
+                          value={outputs.conduta} 
+                          onChange={v => setOutputs(p => ({...p, conduta: v}))} 
+                          isOutput 
+                          minHeight="min-h-[300px]"
+                       />
                    </div>
+
                 </section>
               </div>
             </main>
 
-            {/* RIGHT: KAI ASSISTANT (Updated with Divider, Header & Centered Input) */}
+            {/* RIGHT: KAI ASSISTANT */}
             <aside className="no-print h-full flex flex-col rounded-2xl border border-white/60 bg-white/40 backdrop-blur-xl shadow-xl shadow-slate-200/50 overflow-hidden">
-               
-               {/* STATUS PANEL: Now with border-b-2 for clear separation */}
                <div className="p-5 border-b-2 border-slate-100 bg-white/40 shadow-sm z-10">
                   <SectionLabel>Engine Status</SectionLabel>
                   {engineStatus ? (
@@ -386,24 +415,14 @@ export default function Home() {
                     </div>
                   ) : ( <div className="text-[11px] text-slate-400 italic py-2 text-center">Waiting for analysis...</div> )}
                </div>
-
-               {/* NEW KAI COPILOT HEADER */}
-               <div className="px-5 py-3 bg-white/60 border-b border-slate-100 flex items-center justify-between backdrop-blur-md z-10">
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg">💬</span>
-                        <span className="text-xs font-bold text-slate-700 uppercase tracking-widest">KAI Copilot</span>
-                    </div>
-                    <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-bold">BETA</span>
-               </div>
-
+               
                <div className="flex-1 flex flex-col min-h-0 bg-transparent relative">
-                  
                   <div className="flex-1 overflow-y-auto p-5 space-y-4" ref={chatScrollRef}>
                      {chatMessages.length === 0 && (
                        <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-40">
                          <div className="text-4xl mb-4">💬</div>
-                         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">KAI Copilot Ready</p>
-                         <p className="text-[10px] text-slate-400">"Why is the patient in Phase A?"</p>
+                         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Copiloto KAI</p>
+                         <p className="text-[10px] text-slate-400">"Por que o paciente ta na Fase A?"</p>
                        </div>
                      )}
                      {chatMessages.map((msg, i) => (
@@ -417,18 +436,18 @@ export default function Home() {
                   </div>
 
                   <div className="p-4 border-t border-white/50 bg-white/60">
-                     <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-100">
+                     <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                         <input 
-                          className="flex-1 bg-transparent px-3 py-2 text-xs outline-none placeholder:text-slate-400" 
-                          placeholder="Ask KAI anything..." 
-                          value={chatInput} 
-                          onChange={(e) => setChatInput(e.target.value)} 
-                          onKeyDown={(e) => e.key === "Enter" && handleSendMessage()} 
+                           className="flex-1 bg-transparent px-3 py-2 text-xs outline-none placeholder:text-slate-400"
+                           placeholder="Ask KAI anything..."
+                           value={chatInput}
+                           onChange={(e) => setChatInput(e.target.value)}
+                           onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                         />
                         <button 
-                          onClick={handleSendMessage} 
-                          disabled={isChatLoading} 
-                          className="p-2 bg-slate-100 rounded-lg text-slate-500 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
+                           onClick={handleSendMessage} 
+                           disabled={isChatLoading} 
+                           className="p-2 bg-slate-100 rounded-lg text-slate-500 hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
                         >
                           ➤
                         </button>
@@ -446,6 +465,7 @@ export default function Home() {
   );
 }
 
+// --- UPDATED PRINT LAYOUT ---
 function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }) {
   const [dateStr, setDateStr] = useState("");
   const [reportId, setReportId] = useState("");
@@ -455,8 +475,10 @@ function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }
   }, []);
   
   return (
-    <div className="hidden print:block bg-white text-black p-8 max-w-[210mm] mx-auto min-h-screen">
-      <div className="flex justify-between items-end border-b-2 border-slate-900 pb-4 mb-8">
+    <div className="hidden print:block bg-white text-black p-10 max-w-[210mm] mx-auto min-h-screen">
+      
+      {/* HEADER */}
+      <div className="flex justify-between items-end border-b-2 border-slate-900 pb-4 mb-10">
         <div>
           <h1 className="text-3xl font-serif font-bold text-slate-900 tracking-tight">Relatório Clínico Integrado</h1>
           <p className="text-sm text-slate-600 mt-1 uppercase tracking-widest font-medium">Kauf Clinical Intelligence</p>
@@ -466,7 +488,9 @@ function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }
           <p className="text-xs text-slate-500">ID: {reportId}</p>
         </div>
       </div>
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-10 grid grid-cols-2 gap-8">
+
+      {/* PATIENT INFO */}
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 mb-12 grid grid-cols-2 gap-8 break-inside-avoid">
         <div>
           <span className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Paciente</span>
           <span className="block text-xl font-serif font-medium text-slate-900">{profile.name || "Paciente Não Identificado"}</span>
@@ -482,27 +506,30 @@ function MedicalReportPrint({ profile, outputs }: { profile: any, outputs: any }
            </div>
         </div>
       </div>
-      <div className="space-y-8 font-serif">
-        <section>
-          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">1. Análise Metabólica & Anamnese</h2>
-          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">{outputs.anamnese || "Nenhuma análise gerada."}</p>
-        </section>
-        <section>
-          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">2. Composição Corporal</h2>
-          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">{outputs.bioimpedancia || "Nenhuma análise gerada."}</p>
-        </section>
-        <section>
-          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">3. Genética & Polimorfismos</h2>
-          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">{outputs.genetica || "Nenhuma análise gerada."}</p>
-        </section>
-        <section>
-          <h2 className="text-sm font-bold text-emerald-700 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-3">4. Modulação Autonômica (Wearables)</h2>
-          <p className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap">{outputs.wearable || "Nenhuma análise gerada."}</p>
-        </section>
+
+      {/* SECTION 1: ANÁLISE */}
+      <div className="mb-12">
+        <h2 className="text-lg font-bold text-emerald-800 uppercase tracking-widest border-b border-emerald-100 pb-2 mb-6 break-after-avoid">
+          1. Análise Clínica & Metabólica
+        </h2>
+        <div className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap font-serif">
+          {outputs.analise || "Análise pendente..."}
+        </div>
       </div>
-      <div className="mt-16 pt-8 border-t border-slate-200 text-center">
+
+      {/* SECTION 2: CONDUTA */}
+      <div>
+        <h2 className="text-lg font-bold text-indigo-800 uppercase tracking-widest border-b border-indigo-100 pb-2 mb-6 break-after-avoid">
+          2. Conduta Terapêutica & Planejamento
+        </h2>
+        <div className="text-sm leading-relaxed text-justify text-slate-800 whitespace-pre-wrap font-serif">
+          {outputs.conduta || "Conduta pendente..."}
+        </div>
+      </div>
+
+      <div className="mt-20 pt-8 border-t border-slate-200 text-center break-inside-avoid">
         <p className="text-[10px] text-slate-400 italic">
-          Relatório gerado por inteligência artificial (KAI v2.0). As sugestões terapêuticas devem ser validadas por julgamento clínico humano.
+          Relatório gerado por inteligência artificial (KAI v2.0). Documento para uso exclusivo médico.
         </p>
       </div>
     </div>
