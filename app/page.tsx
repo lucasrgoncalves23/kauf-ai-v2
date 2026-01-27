@@ -22,9 +22,12 @@ type ChatMessage = {
 };
 
 type EngineStatus = {
-  phase: "A" | "B" | "C";
-  alerts: string[];
-  blocked: string[];
+  priority: string;
+  priorityColor: "amber" | "emerald" | "blue";
+  reason: string;
+  focus: string[];
+  enabled: string[];
+  waiting: { module: string; criteria: string }[];
 } | null;
 
 // --- COMPONENTS ---
@@ -79,6 +82,7 @@ function DataBox({
   isLoading = false,
   placeholder,
   minHeight = "min-h-[100px]", // Support for taller boxes
+  titleColor,
 }: {
   title: string;
   value: string;
@@ -88,6 +92,7 @@ function DataBox({
   isLoading?: boolean;
   placeholder?: string;
   minHeight?: string;
+  titleColor?: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -105,7 +110,7 @@ function DataBox({
       }
     `}>
       <div className="flex items-center justify-between">
-        <span className={`text-[10px] font-bold uppercase tracking-wider ${isOutput ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600 transition-colors"}`}>
+        <span className={`text-[10px] font-bold uppercase tracking-wider ${titleColor || (isOutput ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600 transition-colors")}`}>
           {title}
         </span>
         {!isOutput && onImport && (
@@ -142,7 +147,8 @@ export default function Home() {
   const [patientProfile, setPatientProfile] = useState({ name: "", age: "", sex: "" });
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(null);
   const [loadingImport, setLoadingImport] = useState<keyof ClinicalData | null>(null);
-  const [isRunningEngine, setIsRunningEngine] = useState(false);
+  const [isRunningAnalise, setIsRunningAnalise] = useState(false);
+  const [isRunningConduta, setIsRunningConduta] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -204,37 +210,160 @@ export default function Home() {
     }
   }
 
-  async function handleRunEngine() {
-    setIsRunningEngine(true);
-    setEngineStatus(null); 
+  // Helper function to process SSE streams
+  async function processStream(
+    response: Response,
+    onChunk: (text: string) => void
+  ): Promise<string> {
+    const reader = response.body?.getReader();
+    if (!reader) return "";
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+
     try {
-      const response = await fetch("/api/rewrite-report", {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6);
+            if (data === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.text) {
+                fullText += parsed.text;
+                onChunk(parsed.text);
+              }
+            } catch {
+              // Skip unparseable lines
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Stream processing error:", err);
+    }
+
+    return fullText;
+  }
+
+  // Update engine status based on current outputs
+  function updateEngineStatus(analiseText: string, condutaText: string) {
+    const combinedText = (analiseText + condutaText).toLowerCase();
+
+    // Detect recovery signals
+    const hasHrvIssue = combinedText.includes("hrv") && (combinedText.includes("baixo") || combinedText.includes("queda") || combinedText.includes("reduz"));
+    const hasInflammation = combinedText.includes("inflamação") || combinedText.includes("inflamatório") || combinedText.includes("il-6") || combinedText.includes("tnf");
+    const hasAutonomicStress = combinedText.includes("simpático") || combinedText.includes("cortisol") || combinedText.includes("estresse");
+    const needsRecovery = hasHrvIssue || hasInflammation || hasAutonomicStress;
+
+    const allModules = ["Sono", "Nutrição", "Exercício", "Suplementação", "Manipulados", "Soroterapia", "GLP-1", "Hormonal", "Peptídeos"];
+
+    if (needsRecovery) {
+      setEngineStatus({
+        priority: "Recuperação Autonômica",
+        priorityColor: "amber",
+        reason: hasHrvIssue ? "HRV reduzido detectado" : hasInflammation ? "Marcadores inflamatórios elevados" : "Estresse autonômico identificado",
+        focus: [
+          "Estabilizar sistema nervoso autônomo",
+          "Otimizar qualidade do sono",
+          "Reduzir carga inflamatória"
+        ],
+        enabled: ["Sono", "Nutrição", "Exercício", "Suplementação", "Manipulados", "Soroterapia"],
+        waiting: [
+          { module: "Hormonal", criteria: "HRV > 50ms estável" },
+          { module: "Peptídeos", criteria: "Inflamação controlada" }
+        ]
+      });
+    } else {
+      setEngineStatus({
+        priority: "Otimização Metabólica",
+        priorityColor: "emerald",
+        reason: "Sistema autonômico estável",
+        focus: [
+          "Maximizar composição corporal",
+          "Otimizar eixos hormonais",
+          "Potencializar performance"
+        ],
+        enabled: allModules,
+        waiting: []
+      });
+    }
+  }
+
+  async function handleRunAnalise() {
+    setIsRunningAnalise(true);
+    setOutputs((prev) => ({ ...prev, analise: "" })); // Clear only analise
+
+    try {
+      const response = await fetch("/api/generate-analise", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patient: inputs, decision: { phase: "Pending Analysis" } }),
-      });
-      const data = await response.json();
-      if (!data.ok || !data.filled) throw new Error(data.error || "Falha na análise do KAI.");
-      
-      const result = data.filled;
-      setOutputs({
-        analise: result.analise || "Sem análise gerada.",
-        conduta: result.conduta || "Sem conduta gerada.",
+        body: JSON.stringify({ patient: inputs }),
       });
 
-      const aiText = JSON.stringify(result).toLowerCase();
-      const isPhaseA = aiText.includes("recuperação") || aiText.includes("hrv") || aiText.includes("inflamação");
-      setEngineStatus({
-        phase: isPhaseA ? "A" : "B",
-        alerts: isPhaseA ? ["Detectado pelo KAI"] : [],
-        blocked: isPhaseA ? ["Hormonal", "Peptídeos"] : ["Peptídeos"],
+      if (!response.ok) {
+        throw new Error("Falha ao iniciar geração da Análise");
+      }
+
+      const analiseText = await processStream(response, (chunk) =>
+        setOutputs((prev) => ({ ...prev, analise: prev.analise + chunk }))
+      );
+
+      // Update engine status with new analise + existing conduta
+      setOutputs((prev) => {
+        updateEngineStatus(analiseText, prev.conduta);
+        return prev;
       });
-      setToast({ message: "Análise Real do KAI Concluída!", type: "success" });
+
+      setToast({ message: "Análise Clínica Concluída!", type: "success" });
     } catch (err: any) {
       console.error(err);
       setToast({ message: "Erro: " + err.message, type: "error" });
     } finally {
-      setIsRunningEngine(false);
+      setIsRunningAnalise(false);
+    }
+  }
+
+  async function handleRunConduta() {
+    setIsRunningConduta(true);
+    setOutputs((prev) => ({ ...prev, conduta: "" })); // Clear only conduta
+
+    try {
+      const response = await fetch("/api/generate-conduta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patient: inputs }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha ao iniciar geração da Conduta");
+      }
+
+      const condutaText = await processStream(response, (chunk) =>
+        setOutputs((prev) => ({ ...prev, conduta: prev.conduta + chunk }))
+      );
+
+      // Update engine status with existing analise + new conduta
+      setOutputs((prev) => {
+        updateEngineStatus(prev.analise, condutaText);
+        return prev;
+      });
+
+      setToast({ message: "Conduta Terapêutica Concluída!", type: "success" });
+    } catch (err: any) {
+      console.error(err);
+      setToast({ message: "Erro: " + err.message, type: "error" });
+    } finally {
+      setIsRunningConduta(false);
     }
   }
 
@@ -275,7 +404,10 @@ export default function Home() {
         } catch (e) { console.error("Failed to execute KAI command", e); }
         rawText = rawText.replace(commandRegex, "").trim();
       }
-      setChatMessages(prev => [...prev, { role: "assistant", content: rawText }]);
+
+      // FALLBACK: Se o rawText ficou vazio após remover o comando, adicionamos uma resposta de sucesso.
+      const finalDisplayToken = rawText || "Entendido. Alteração realizada com sucesso!";
+      setChatMessages(prev => [...prev, { role: "assistant", content: finalDisplayToken }]);
     } catch (err: any) {
       setChatMessages(prev => [...prev, { role: "assistant", content: `❌ Erro: ${err.message || "Falha de conexão"}` }]);
     } finally {
@@ -355,9 +487,12 @@ export default function Home() {
                    </div>
                 </section>
 
-                <div className="no-print flex justify-center py-4">
-                  <button onClick={handleRunEngine} disabled={isRunningEngine} className={`flex items-center gap-3 px-10 py-4 rounded-full font-bold text-sm shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all ${isRunningEngine ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-blue-200"}`}>
-                    {isRunningEngine ? <Spinner /> : <span>⚡ Run with KAI</span>}
+                <div className="no-print flex justify-center gap-4 py-4">
+                  <button onClick={handleRunAnalise} disabled={isRunningAnalise} className={`flex items-center gap-3 px-8 py-4 rounded-full font-bold text-sm shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all ${isRunningAnalise ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-200"}`}>
+                    {isRunningAnalise ? <Spinner /> : <span>Run Análise</span>}
+                  </button>
+                  <button onClick={handleRunConduta} disabled={isRunningConduta} className={`flex items-center gap-3 px-8 py-4 rounded-full font-bold text-sm shadow-xl hover:shadow-2xl hover:-translate-y-0.5 transition-all ${isRunningConduta ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-indigo-200"}`}>
+                    {isRunningConduta ? <Spinner /> : <span>Run Conduta</span>}
                   </button>
                 </div>
 
@@ -371,7 +506,7 @@ export default function Home() {
                           <span className="text-xs font-bold uppercase text-emerald-600 tracking-widest">Análise Clínica Integrada</span>
                        </div>
                        <DataBox 
-                          title="Tese Fisiológica (2-3 Pages)" 
+                          title="Tese Fisiológica" 
                           value={outputs.analise} 
                           onChange={v => setOutputs(p => ({...p, analise: v}))} 
                           isOutput 
@@ -385,12 +520,13 @@ export default function Home() {
                           <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
                           <span className="text-xs font-bold uppercase text-indigo-600 tracking-widest">Conduta & Planejamento</span>
                        </div>
-                       <DataBox 
-                          title="Plano Terapêutico" 
-                          value={outputs.conduta} 
-                          onChange={v => setOutputs(p => ({...p, conduta: v}))} 
-                          isOutput 
+                       <DataBox
+                          title="Plano Terapêutico"
+                          value={outputs.conduta}
+                          onChange={v => setOutputs(p => ({...p, conduta: v}))}
+                          isOutput
                           minHeight="min-h-[300px]"
+                          titleColor="text-indigo-600"
                        />
                    </div>
 
@@ -400,20 +536,63 @@ export default function Home() {
 
             {/* RIGHT: KAI ASSISTANT */}
             <aside className="no-print h-full flex flex-col rounded-2xl border border-white/60 bg-white/40 backdrop-blur-xl shadow-xl shadow-slate-200/50 overflow-hidden">
-               <div className="p-5 border-b-2 border-slate-100 bg-white/40 shadow-sm z-10">
-                  <SectionLabel>Engine Status</SectionLabel>
+               <div className="p-5 border-b border-slate-100 bg-white/40 shadow-sm z-10">
+                  <SectionLabel>Inteligencia Clinica</SectionLabel>
                   {engineStatus ? (
-                    <div className="mt-3 space-y-3">
-                      <div className="flex items-center justify-between p-3 bg-white/60 rounded-lg border border-white/50">
-                        <span className="text-xs text-slate-500 font-medium">Current Phase</span>
-                        <span className={`text-sm font-bold px-2 py-0.5 rounded ${engineStatus.phase === "A" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                          {engineStatus.phase}
-                        </span>
+                    <div className="mt-3 space-y-4">
+                      {/* Priority Badge */}
+                      <div className={`p-4 rounded-xl border ${
+                        engineStatus.priorityColor === "amber"
+                          ? "bg-amber-50 border-amber-100"
+                          : "bg-emerald-50 border-emerald-100"
+                      }`}>
+                        <div className={`font-bold text-sm ${
+                          engineStatus.priorityColor === "amber" ? "text-amber-800" : "text-emerald-800"
+                        }`}>
+                          {engineStatus.priority}
+                        </div>
+                        <p className={`text-[11px] mt-1 ${
+                          engineStatus.priorityColor === "amber" ? "text-amber-700" : "text-emerald-700"
+                        }`}>
+                          {engineStatus.reason}
+                        </p>
                       </div>
-                      {engineStatus.alerts.length > 0 && <div className="p-3 bg-amber-50/80 border border-amber-100/50 rounded-lg text-[11px] text-amber-800 leading-relaxed">⚠️ {engineStatus.alerts.join(", ")}</div>}
-                      {engineStatus.blocked.length > 0 && <div className="p-3 bg-red-50/80 border border-red-100/50 rounded-lg text-[11px] text-red-800 leading-relaxed">🚫 <strong>Blocked:</strong> {engineStatus.blocked.join(", ")}</div>}
+
+                      {/* Therapeutic Focus */}
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wide">Foco Terapeutico</span>
+                        <ul className="mt-2 space-y-1.5">
+                          {engineStatus.focus.map((f, i) => (
+                            <li key={i} className="text-[11px] text-slate-600 flex items-start gap-2">
+                              <span className="text-slate-300 mt-0.5">•</span>
+                              <span>{f}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Module Status */}
+                      <div>
+                        <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wide">Modulos</span>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {engineStatus.enabled.map((m, i) => (
+                            <span key={i} className="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-medium rounded-full">
+                              {m}
+                            </span>
+                          ))}
+                          {engineStatus.waiting.map((w, i) => (
+                            <span key={i} className="px-2 py-1 bg-slate-100 text-slate-400 text-[10px] font-medium rounded-full" title={w.criteria}>
+                              {w.module}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  ) : ( <div className="text-[11px] text-slate-400 italic py-2 text-center">Waiting for analysis...</div> )}
+                  ) : (
+                    <div className="text-[11px] text-slate-400 italic py-4 text-center">
+                      Execute a analise para ver a inteligencia clinica
+                    </div>
+                  )}
                </div>
                
                <div className="flex-1 flex flex-col min-h-0 bg-transparent relative">
