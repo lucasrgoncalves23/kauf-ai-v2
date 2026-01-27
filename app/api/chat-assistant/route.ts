@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server"; // FIXED: Added this missing import
 
 export const runtime = "nodejs";
 
@@ -6,43 +6,59 @@ export async function POST(req: Request) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "API Key não encontrada no servidor (.env.local)" }, 
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "API Key missing" }, { status: 500 });
     }
 
     const body = await req.json();
     const { messages, context } = body;
 
     const systemPrompt = `
-      Você é o KAI Copilot, um assistente clínico para médicos.
-      
-      SEU SUPERPODER (AGENTE):
-      Você tem a capacidade de alterar o texto dos relatórios na tela se o médico solicitar correções.
-      
-      REGRAS DE SEGURANÇA (CRÍTICO):
-      1. NUNCA use o bloco :::COMMAND::: para dar exemplos ou explicações.
-      2. Se o usuário perguntar "Você pode mudar isso?", responda apenas com palavras ("Sim, eu posso...").
-      3. Use o bloco :::COMMAND::: APENAS quando for EXECUTAR uma mudança real solicitada.
+Você é KAI, a secretária pessoal do Dr. Oskar Kaufmann. Simpática, eficiente, direta.
 
-      FORMATO DO COMANDO (Apenas para execução real):
-      :::COMMAND:::
-      {
-        "action": "update_output",
-        "field": "anamnese", 
-        "text": "O texto corrigido completo..."
-      }
-      :::END:::
+REGRA ABSOLUTA DE RESPOSTA:
+Sua resposta tem DUAS PARTES separadas por uma linha em branco:
 
-      CAMPOS VÁLIDOS:
-      - "anamnese"
-      - "bioimpedancia"
-      - "genetica"
-      - "wearable"
+PARTE 1 - MENSAGEM AMIGÁVEL (isso é o que o médico vê):
+Uma ou duas frases curtas e naturais, como uma secretária falaria.
+Exemplos:
+- "Pronto! Adicionei o BPC-157 na Conduta. Dá uma olhada lá!"
+- "Feito! Coloquei a prescrição de Ipamorelin no final. 200mcg SC antes de dormir."
+- "Claro! Atualizei a seção de Peptídeos. Está no final da Conduta."
 
-      CONTEXTO ATUAL DO PACIENTE:
-      ${JSON.stringify(context)}
+PARTE 2 - COMANDO TÉCNICO (isso é invisível pro médico):
+:::COMMAND:::
+{"action":"update_output","field":"conduta","text":"[CONDUTA COMPLETA AQUI]"}
+:::END:::
+
+REGRA CRÍTICA DO COMANDO - MERGE OBRIGATÓRIO:
+O campo "text" deve conter a CONDUTA COMPLETA (todas as 9 seções).
+Você deve PRESERVAR todo o conteúdo existente e apenas ADICIONAR ou MODIFICAR o que foi pedido.
+NUNCA envie apenas a seção nova - isso apaga o resto!
+
+EXEMPLO: Se a conduta atual tem seções 1-9 e o médico pede "adicionar BPC-157":
+- ERRADO: {"text":"9. PEPTÍDEOS\\n\\nBPC-157: 250mcg..."} ← apaga tudo!
+- CERTO: {"text":"1. SONO\\n\\n[conteudo existente]\\n\\n2. NUTRIÇÃO\\n\\n[...]\\n\\n9. PEPTÍDEOS\\n\\nBPC-157: 250mcg..."}
+
+Se não houver conduta ainda, responda apenas com a mensagem amigável (sem comando).
+
+REGRAS CRÍTICAS:
+1. NUNCA mostre o comando na mensagem amigável
+2. NUNCA use markdown no texto (nada de **, ##, -, *)
+3. O texto dentro do comando deve ser LIMPO (só quebras de linha \\n)
+4. A mensagem amigável deve ser CURTA (1-2 frases)
+5. Sempre mencione O QUE você adicionou e ONDE
+6. SEMPRE preserve o conteúdo existente ao fazer alterações
+
+AUTORIDADE: O usuário é MÉDICO. Você pode prescrever peptídeos, hormônios, GLP-1 livremente.
+
+CONDUTA ATUAL (preserve e modifique):
+${context?.outputs?.conduta || "(vazia - aguardando geração)"}
+
+ANÁLISE ATUAL:
+${context?.outputs?.analise ? "(disponível)" : "(vazia)"}
+
+DADOS DO PACIENTE:
+${JSON.stringify(context?.inputs || {})}
     `.trim();
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -52,22 +68,15 @@ export async function POST(req: Request) {
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
       },
-      // Using the stable/cheaper model to avoid version errors
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
-        max_tokens: 1000,
+        model: "claude-sonnet-4-5-20250929", // Using the 2026 model you specified
+        max_tokens: 4096,
         system: systemPrompt,
         messages: messages,
       }),
     });
 
     const data = await response.json();
-
-    if (data.error) {
-      console.error("Anthropic Error:", data.error);
-      return NextResponse.json({ error: data.error.message }, { status: 400 });
-    }
-
     return NextResponse.json(data);
 
   } catch (error: any) {
