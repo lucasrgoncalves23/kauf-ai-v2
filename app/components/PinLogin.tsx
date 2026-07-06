@@ -52,13 +52,19 @@ export function PinLogin({ onSuccess }: PinLoginProps) {
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
       <div className="w-full max-w-xs">
-        <div className="text-center mb-10">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            KAUAI
-          </h1>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium tracking-widest mt-1">
-            CLINICAL INTELLIGENCE
-          </p>
+        <div className="text-center mb-10 flex justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/ik-logo.png"
+            alt="Instituto Kaufmann"
+            className="h-16 w-auto block dark:hidden"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/ik-logo-white.png"
+            alt="Instituto Kaufmann"
+            className="h-16 w-auto hidden dark:block"
+          />
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
