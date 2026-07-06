@@ -1,6 +1,5 @@
 // app/lib/engine.ts
 import type { ClinicalInput, Phase } from "@/app/types/clinical";
-import { PHASE_RULES } from "@/app/lib/kaufmannSpec";
 
 export type BlockedModule = "Hormonal" | "Peptídeos" | "Metabolismo / GLP-1";
 
@@ -65,20 +64,8 @@ export function runEngine(input: ClinicalInput): {
   if (hrvDown) alerts.push("HRV em queda (tendência)");
   if (rhrUp) alerts.push("RHR em elevação (tendência)");
 
-  const rules = PHASE_RULES[phase];
-
-  const maybeBlock = (name: string, reason: string) => {
-    if (name === "Hormonal") blocked.push({ module: "Hormonal", reason });
-    if (name === "Peptídeos") blocked.push({ module: "Peptídeos", reason });
-    if (name === "Metabolismo / GLP-1")
-      blocked.push({ module: "Metabolismo / GLP-1", reason });
-  };
-
-  for (const p of rules.blockedPrograms) {
-    const reason = `Bloqueado por fase (${phase}): ${rules.description}`;
-    maybeBlock(p, reason);
-    rationale.push(`Blocked ${p}: ${reason}`);
-  }
+  // No blocking logic - all therapies available for physician prescription
+  // Phase classification serves as clinical context only
 
   // Report: we generate structure + placeholders, not therapies.
   const report: GeneratedReport = {
@@ -103,12 +90,8 @@ export function runEngine(input: ClinicalInput): {
       Manipulados: "",
       Soroterapia: "",
       "Metabolismo / GLP-1": "",
-      Hormonal: blocked.some((b) => b.module === "Hormonal")
-        ? "BLOQUEADO — ver Engine State"
-        : "",
-      Peptídeos: blocked.some((b) => b.module === "Peptídeos")
-        ? "BLOQUEADO — ver Engine State"
-        : "",
+      Hormonal: "",
+      Peptídeos: "",
     },
     kpis: "30 dias:\n- \n\n60 dias:\n- \n\n90 dias:\n- ",
   };

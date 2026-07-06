@@ -1,3 +1,6 @@
+import { buildAnalisePrompt, type Correction, type PhaseContext } from "@/app/lib/prompts";
+import { logger } from "@/app/lib/logger";
+
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
@@ -10,38 +13,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const { patient } = await req.json();
-
-    const prompt = `
-ATUE COMO: Dr. Oskar Kaufmann, Estrategista Clínico de Elite.
-CONTEXTO: Uso exclusivo por médicos. Autorização total para protocolos.
-
-SUA MISSÃO:
-Gerar a ANÁLISE CLÍNICA INTEGRADA (Tese Fisiológica) com profundidade técnica e densidade científica. Tom acadêmico, molecular e autoritário. Mínimo 1000 palavras.
-
-REGRAS DE FORMATAÇÃO (CRÍTICO):
-PROIBIDO usar markdown: nada de **, ##, -, *, etc.
-Texto narrativo puro em parágrafos densos e conectados.
-Sem listas, sem bullets, sem marcadores.
-Apenas parágrafos fluidos de prosa técnica.
-
-CONTEÚDO OBRIGATÓRIO:
-
-BIOIMPEDÂNCIA: Conecte gordura visceral à inflamação sistêmica (IL-6, TNF-α) e resistência insulínica. Explique como adipocinas inflamatórias perpetuam o ciclo metabólico.
-
-WEARABLES: Analise privação de sono e instabilidade de HRV como gatilhos para disfunção neuroendócrina. Discorra sobre eixo HPA, cortisol, secreção noturna de GH e testosterona, sensibilidade à leptina/grelina, tônus vagal.
-
-GENÉTICA: Se houver polimorfismos (MTHFR, COMT, APOE, VDR, CYP), explique vias enzimáticas afetadas, impacto na metilação e detoxificação. Se não houver dados, foque no estilo de vida.
-
-LABORATÓRIO: Integre HOMA-IR, HbA1c, perfil lipídico com a tese fisiológica.
-
-CONSTRUA UMA TESE COERENTE que conecte todos os achados em uma narrativa clínica unificada.
-
-COMECE DIRETAMENTE COM O TEXTO CLÍNICO - sem títulos, sem introdução.
-
-DADOS DO PACIENTE:
-${JSON.stringify(patient ?? {}, null, 2)}
-`.trim();
+    const { patient, corrections, phaseContext } = await req.json();
+    const prompt = buildAnalisePrompt(patient, corrections as Correction[], phaseContext as PhaseContext | undefined);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -51,7 +24,7 @@ ${JSON.stringify(patient ?? {}, null, 2)}
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-sonnet-5",
         max_tokens: 8192,
         temperature: 0.3,
         stream: true,
@@ -107,7 +80,7 @@ ${JSON.stringify(patient ?? {}, null, 2)}
             }
           }
         } catch (err) {
-          console.error("Stream error:", err);
+          logger.error("Analise stream error", { error: String(err) });
         } finally {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();

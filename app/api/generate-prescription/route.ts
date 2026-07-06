@@ -1,4 +1,4 @@
-import { buildCondutaPrompt, type Correction, type PhaseContext } from "@/app/lib/prompts";
+import { buildPrescriptionPrompt } from "@/app/lib/prompts";
 import { logger } from "@/app/lib/logger";
 
 export const runtime = "nodejs";
@@ -13,8 +13,16 @@ export async function POST(req: Request) {
       });
     }
 
-    const { patient, corrections, phaseContext } = await req.json();
-    const prompt = buildCondutaPrompt(patient, corrections as Correction[], phaseContext as PhaseContext | undefined);
+    const { conduta, patientName } = await req.json();
+
+    if (!conduta) {
+      return new Response(JSON.stringify({ error: "Conduta não fornecida" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const prompt = buildPrescriptionPrompt(conduta, patientName);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -80,7 +88,7 @@ export async function POST(req: Request) {
             }
           }
         } catch (err) {
-          logger.error("Conduta stream error", { error: String(err) });
+          logger.error("Prescription stream error", { error: String(err) });
         } finally {
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();

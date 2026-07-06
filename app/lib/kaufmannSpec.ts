@@ -52,6 +52,7 @@ export const PHASE_RULES: Record<
       "Manipulados",
       "Soroterapia",
       "Hormonal",
+      "Metabolismo / GLP-1",
     ],
     blockedPrograms: ["Peptídeos"],
   },
@@ -82,6 +83,6 @@ export const STYLE_CONSTRAINTS = [
   "Linguagem objetiva e clínica.",
   "Sem emojis, sem metáforas.",
   "Frases curtas e afirmativas.",
-  "Nunca sugerir módulos bloqueados.",
-  "Sempre justificar bloqueios no Engine State.",
+  "Módulos bloqueados pela fase devem ser marcados como AGUARDANDO.",
+  "Justificar bloqueios com critérios clínicos objetivos.",
 ];
