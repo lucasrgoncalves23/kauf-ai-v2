@@ -3,6 +3,7 @@ import pdf from "pdf-parse";
 import { logger } from "@/app/lib/logger";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -13,10 +14,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Check file size (max 10MB)
-    const MAX_SIZE = 10 * 1024 * 1024;
+    // Check file size — Vercel rejects bodies over ~4.5MB at the platform level
+    const MAX_SIZE = 4 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Arquivo muito grande (máx 10MB)" }, { status: 400 });
+      return NextResponse.json({ error: "Arquivo muito grande (máx 4MB)" }, { status: 400 });
     }
 
     const arrayBuffer = await file.arrayBuffer();

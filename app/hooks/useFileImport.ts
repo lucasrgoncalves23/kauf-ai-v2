@@ -65,6 +65,16 @@ export function useFileImport(
         return;
       }
 
+      // Vercel rejects request bodies over ~4.5MB before they reach the API route
+      const MAX_UPLOAD = 4 * 1024 * 1024;
+      if (file.size > MAX_UPLOAD) {
+        setToast({
+          message: "Arquivo muito grande (máx 4MB). Comprima o PDF ou divida em partes.",
+          type: "error",
+        });
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
@@ -77,7 +87,16 @@ export function useFileImport(
       }
 
       const res = await fetch("/api/import-pdf", { method: "POST", body: formData });
-      const data = await res.json();
+
+      // Platform errors (413 body too large, 504 timeout) return HTML, not JSON
+      let data: { text?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        if (res.status === 413) throw new Error("Arquivo muito grande para o servidor (máx 4MB)");
+        if (res.status === 504) throw new Error("Tempo limite excedido. Tente um arquivo menor.");
+        throw new Error(`Falha no servidor (código ${res.status})`);
+      }
 
       if (!res.ok) throw new Error(data.error || "Falha no servidor");
 
