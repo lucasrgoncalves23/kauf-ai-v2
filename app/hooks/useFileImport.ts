@@ -60,119 +60,123 @@ export function useFileImport(
     return data.text;
   }
 
-  async function handleImport(file: File, target: keyof ClinicalData) {
+  /** Extract text from one file. Reports progress via onStatus; returns the text. */
+  async function processFile(file: File, onStatus: (status: string) => void): Promise<string> {
+    // CSV files: read client-side, no server call needed
+    if (isCSV(file)) {
+      const raw = await file.text();
+      const formatted = formatCSV(raw);
+      if (!formatted) throw new Error(`CSV vazio ou inválido (${file.name})`);
+      return formatted;
+    }
+
+    const validTypes = ["application/pdf", "image/jpeg", "image/png"];
+    if (!validTypes.includes(file.type)) {
+      throw new Error(`Formato inválido (${file.name}). Use PDF, JPG, PNG ou CSV.`);
+    }
+
+    if (file.type === "application/pdf") {
+      onStatus("Lendo PDF...");
+
+      try {
+        const { extractPdfText, renderPdfPagesToImages } = await import("../lib/clientPdf");
+
+        // Digital PDFs: extract text in the browser — no upload, no size limit
+        const { text } = await extractPdfText(file);
+        if (text.length > 150) return text;
+
+        // Scanned PDFs: render pages to JPEG and OCR each one via the API
+        onStatus("PDF digitalizado — preparando páginas para leitura (IA)...");
+        const { images, pageCount, truncated } = await renderPdfPagesToImages(
+          file,
+          MAX_SCAN_PAGES
+        );
+
+        const results: string[] = new Array(images.length);
+        let done = 0;
+        let nextIndex = 0;
+        const workers = Array.from(
+          { length: Math.min(OCR_CONCURRENCY, images.length) },
+          async () => {
+            while (nextIndex < images.length) {
+              const i = nextIndex++;
+              results[i] = await ocrUpload(images[i], `pagina-${i + 1}.jpg`);
+              done++;
+              onStatus(`Lendo página ${done}/${images.length} (IA)...`);
+            }
+          }
+        );
+        await Promise.all(workers);
+
+        let fullText = results.join("\n\n");
+        if (truncated) {
+          fullText += `\n\n[Aviso: PDF com ${pageCount} páginas — apenas as primeiras ${MAX_SCAN_PAGES} foram lidas.]`;
+        }
+        return fullText;
+      } catch (pdfErr) {
+        // Fallback: small PDFs can still go through the server route
+        logger.error("Client-side PDF processing failed", { error: String(pdfErr) });
+        if (file.size > MAX_UPLOAD) throw pdfErr;
+        onStatus("Lendo PDF...");
+        return await ocrUpload(file, file.name);
+      }
+    }
+
+    // Images: compress client-side if over the upload limit
+    let payload: Blob = file;
+    let filename = file.name;
+    if (file.size > MAX_UPLOAD) {
+      onStatus("Comprimindo imagem...");
+      const { compressImageFile } = await import("../lib/clientPdf");
+      payload = await compressImageFile(file);
+      filename = file.name.replace(/\.\w+$/, "") + ".jpg";
+      if (payload.size > MAX_UPLOAD) {
+        throw new Error(`Imagem grande demais, mesmo após compressão (${file.name}).`);
+      }
+    }
+
+    onStatus("Lendo Imagem (IA)...");
+    return await ocrUpload(payload, filename);
+  }
+
+  async function handleImport(filesOrFile: File | File[], target: keyof ClinicalData) {
+    const files = Array.isArray(filesOrFile) ? filesOrFile : [filesOrFile];
+    if (files.length === 0) return;
+
     setLoadingImport(target);
 
-    // Save existing content before showing loading status
-    const existingContent = inputs[target]?.trim() || "";
-
-    const showStatus = (status: string) => {
-      if (existingContent) {
-        setInputs((prev) => ({ ...prev, [target]: existingContent + "\n\n---\n\n" + status }));
-      } else {
-        setInputs((prev) => ({ ...prev, [target]: status }));
-      }
-    };
-
-    const applyResult = (text: string, kind: "Arquivo" | "CSV" = "Arquivo") => {
-      if (existingContent) {
-        const separator = `\n\n--- ${file.name} ---\n\n`;
-        setInputs((prev) => ({ ...prev, [target]: existingContent + separator + text }));
-        setToast({ message: `${kind} adicionado com sucesso!`, type: "success" });
-      } else {
-        setInputs((prev) => ({ ...prev, [target]: text }));
-        setToast({ message: `${kind} importado com sucesso!`, type: "success" });
-      }
-    };
+    // Accumulate content across files; each completed file is committed immediately
+    let accumulated = inputs[target]?.trim() || "";
 
     try {
-      // CSV files: read client-side, no server call needed
-      if (isCSV(file)) {
-        const raw = await file.text();
-        const formatted = formatCSV(raw);
-        if (!formatted) throw new Error("CSV vazio ou inválido");
-        applyResult(formatted, "CSV");
-        return;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const prefix = files.length > 1 ? `[${i + 1}/${files.length}] ${file.name} — ` : "";
+
+        const showStatus = (status: string) => {
+          const base = accumulated ? accumulated + "\n\n---\n\n" : "";
+          setInputs((prev) => ({ ...prev, [target]: base + prefix + status }));
+        };
+
+        const text = await processFile(file, showStatus);
+
+        accumulated = accumulated
+          ? accumulated + `\n\n--- ${file.name} ---\n\n` + text
+          : text;
+        setInputs((prev) => ({ ...prev, [target]: accumulated }));
       }
 
-      // Validate file type
-      const validTypes = ["application/pdf", "image/jpeg", "image/png"];
-      if (!validTypes.includes(file.type)) {
-        setToast({ message: "Formato inválido. Use PDF, JPG, PNG ou CSV.", type: "error" });
-        return;
-      }
-
-      if (file.type === "application/pdf") {
-        showStatus("Lendo PDF...");
-
-        try {
-          const { extractPdfText, renderPdfPagesToImages } = await import("../lib/clientPdf");
-
-          // Digital PDFs: extract text in the browser — no upload, no size limit
-          const { text } = await extractPdfText(file);
-          if (text.length > 150) {
-            applyResult(text);
-            return;
-          }
-
-          // Scanned PDFs: render pages to JPEG and OCR each one via the API
-          showStatus("PDF digitalizado — preparando páginas para leitura (IA)...");
-          const { images, pageCount, truncated } = await renderPdfPagesToImages(
-            file,
-            MAX_SCAN_PAGES
-          );
-
-          const results: string[] = new Array(images.length);
-          let done = 0;
-          let nextIndex = 0;
-          const workers = Array.from(
-            { length: Math.min(OCR_CONCURRENCY, images.length) },
-            async () => {
-              while (nextIndex < images.length) {
-                const i = nextIndex++;
-                results[i] = await ocrUpload(images[i], `pagina-${i + 1}.jpg`);
-                done++;
-                showStatus(`Lendo página ${done}/${images.length} (IA)...`);
-              }
-            }
-          );
-          await Promise.all(workers);
-
-          let fullText = results.join("\n\n");
-          if (truncated) {
-            fullText += `\n\n[Aviso: PDF com ${pageCount} páginas — apenas as primeiras ${MAX_SCAN_PAGES} foram lidas.]`;
-          }
-          applyResult(fullText);
-          return;
-        } catch (pdfErr) {
-          // Fallback: small PDFs can still go through the server route
-          logger.error("Client-side PDF processing failed", { error: String(pdfErr) });
-          if (file.size > MAX_UPLOAD) throw pdfErr;
-          showStatus("Lendo PDF...");
-          applyResult(await ocrUpload(file, file.name));
-          return;
-        }
-      }
-
-      // Images: compress client-side if over the upload limit
-      let payload: Blob = file;
-      let filename = file.name;
-      if (file.size > MAX_UPLOAD) {
-        showStatus("Comprimindo imagem...");
-        const { compressImageFile } = await import("../lib/clientPdf");
-        payload = await compressImageFile(file);
-        filename = file.name.replace(/\.\w+$/, "") + ".jpg";
-        if (payload.size > MAX_UPLOAD) {
-          throw new Error("Imagem grande demais, mesmo após compressão.");
-        }
-      }
-
-      showStatus("Lendo Imagem (IA)...");
-      applyResult(await ocrUpload(payload, filename));
+      setToast({
+        message:
+          files.length > 1
+            ? `${files.length} arquivos importados com sucesso!`
+            : "Arquivo importado com sucesso!",
+        type: "success",
+      });
     } catch (err: any) {
       logger.error("File import failed", { error: String(err), target });
-      // Restore existing content on error instead of clearing
-      setInputs((prev) => ({ ...prev, [target]: existingContent }));
+      // Keep whatever was imported before the failure; drop the failed file's status text
+      setInputs((prev) => ({ ...prev, [target]: accumulated }));
       setToast({ message: "Erro na importação: " + err.message, type: "error" });
     } finally {
       setLoadingImport(null);

@@ -293,7 +293,7 @@ function parseNotes(text: string): string {
 export type AnamneseFormProps = {
   value: string;
   onChange: (v: string) => void;
-  onImport?: (file: File) => void;
+  onImport?: (files: File[]) => void;
   isLoading?: boolean;
   compact?: boolean;
 };
@@ -371,8 +371,8 @@ export function AnamneseForm({
   const allExpanded = SECTIONS.every((s) => expanded[s.num]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && onImport) onImport(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0 && onImport) onImport(files);
     if (e.target) e.target.value = "";
   };
 
@@ -418,6 +418,7 @@ export function AnamneseForm({
             <>
               <input
                 type="file"
+                multiple
                 accept="application/pdf, image/jpeg, image/png, text/csv, .csv"
                 className="hidden"
                 ref={fileInputRef}
