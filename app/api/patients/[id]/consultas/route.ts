@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConsultas, createConsulta, getPatient } from "../../../../lib/db";
+import { notifyCrmConsultaFinalizada } from "../../../../lib/crm";
 import { logger } from "@/app/lib/logger";
 import type { Consulta } from "../../../../types/clinical";
 
@@ -69,6 +70,10 @@ export async function POST(
     };
 
     const created = await createConsulta(consulta);
+
+    // avisa o CRM (melhor esforço — nunca bloqueia o salvamento)
+    await notifyCrmConsultaFinalizada(patient, created);
+
     return NextResponse.json({ consulta: created }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

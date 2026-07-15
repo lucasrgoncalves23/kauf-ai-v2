@@ -77,6 +77,17 @@ export function PatientSnapshot({ profile, onProfileChange, compact = false }: P
             />
           </div>
         </div>
+        <div className="group">
+          <label className="block text-[10px] uppercase text-slate-400 dark:text-slate-500 mb-1 font-bold">
+            WhatsApp
+          </label>
+          <input
+            className={inputClass}
+            placeholder="+55 11 99999-8888"
+            value={profile.phone ?? ""}
+            onChange={(e) => onProfileChange({ ...profile, phone: e.target.value })}
+          />
+        </div>
       </div>
     </>
   );

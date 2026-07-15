@@ -92,15 +92,16 @@ export async function POST(req: Request) {
           }, { status: 500 });
         }
 
-        // Validate response structure
-        if (!aiData.content || !aiData.content[0] || !aiData.content[0].text) {
+        // Sonnet 5 may prepend a thinking block; find the text block explicitly
+        const pdfText = aiData.content?.find((b: { type: string }) => b.type === "text")?.text;
+        if (!pdfText) {
           logger.error("Unexpected AI response structure", { response: JSON.stringify(aiData).slice(0, 500) });
           return NextResponse.json({
             error: "Resposta inesperada da IA. Tente novamente."
           }, { status: 500 });
         }
 
-        return NextResponse.json({ text: aiData.content[0].text });
+        return NextResponse.json({ text: pdfText });
 
       } catch (e: any) {
         logger.error("PDF processing failed", { error: e.message });
@@ -151,15 +152,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "AI Error: " + data.error.message }, { status: 500 });
       }
 
-      // Validate response structure
-      if (!data.content || !data.content[0] || !data.content[0].text) {
+      // Sonnet 5 may prepend a thinking block; find the text block explicitly
+      const imageText = data.content?.find((b: { type: string }) => b.type === "text")?.text;
+      if (!imageText) {
         logger.error("Unexpected AI response for image", { response: JSON.stringify(data).slice(0, 500) });
         return NextResponse.json({
           error: "Resposta inesperada da IA. Tente novamente."
         }, { status: 500 });
       }
 
-      return NextResponse.json({ text: data.content[0].text });
+      return NextResponse.json({ text: imageText });
     }
 
     return NextResponse.json({ error: "Unsupported file type" }, { status: 400 });

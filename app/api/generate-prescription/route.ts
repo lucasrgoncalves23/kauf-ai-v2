@@ -34,7 +34,6 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "claude-sonnet-5",
         max_tokens: 8192,
-        temperature: 0.3,
         stream: true,
         messages: [{ role: "user", content: prompt }],
       }),

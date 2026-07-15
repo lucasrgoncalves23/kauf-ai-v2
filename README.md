@@ -237,6 +237,21 @@ Crie um arquivo `.env.local` para configurações adicionais:
 NEXT_PUBLIC_API_URL=https://api.example.com
 ```
 
+### Ponte com o CRM (Kaufmann Clinic OS)
+
+Integração bidirecional com o CRM da clínica:
+
+- **CRM → Kauf AI**: quando um paciente agenda consulta via WhatsApp ou é cadastrado no painel do CRM, ele aparece aqui automaticamente. Endpoint: `POST /api/webhooks/crm` (evento `paciente_upsert`), autenticado por `Authorization: Bearer <KAUF_BRIDGE_SECRET>`. O match usa `kauf_id` → CPF → telefone (`profile.phone`); responde `{ "kauf_id": "..." }`.
+- **Kauf AI → CRM**: ao salvar uma consulta, o desfecho (conduta + notas) é enviado ao CRM ([app/lib/crm.ts](app/lib/crm.ts)), que extrai ações operacionais ("retorno semana que vem") como sugestões de tarefa pendentes de aprovação.
+
+```env
+# .env.local
+KAUF_BRIDGE_SECRET=   # mesmo segredo configurado no CRM
+CRM_WEBHOOK_URL=      # ex.: https://crm.exemplo.com/api/webhooks/kauf
+```
+
+> 💡 O telefone (WhatsApp) é a chave de identidade do CRM — colete-o no cadastro (`profile.phone`) para que o match entre os sistemas seja imediato.
+
 ---
 
 ## Tech Stack

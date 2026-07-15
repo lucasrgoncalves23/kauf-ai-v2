@@ -49,10 +49,10 @@ export function useCopilotChat({
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
+      // Sonnet 5 may prepend a thinking block; find the text block explicitly
       let rawText =
-        data.content && data.content[0]
-          ? data.content[0].text
-          : "Erro: Resposta vazia do KAUAI.";
+        data.content?.find((b: { type: string }) => b.type === "text")?.text ||
+        "Erro: Resposta vazia do KAUAI.";
 
       const commandRegex = /:::COMMAND:::([\s\S]*?):::END:::/;
       const match = rawText.match(commandRegex);

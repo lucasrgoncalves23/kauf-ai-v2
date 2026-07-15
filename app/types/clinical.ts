@@ -104,6 +104,8 @@ export type PatientProfile = {
   sex: string;
   cpf: string;
   birthDate: string;
+  /** WhatsApp phone (E.164) — identity key shared with the CRM bridge */
+  phone?: string;
 };
 
 export type PatientRecord = {

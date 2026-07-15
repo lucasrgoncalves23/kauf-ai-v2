@@ -23,6 +23,7 @@ import type {
   EngineStatus,
   Settings,
   PatientRecord,
+  PatientProfile,
   Consulta,
 } from "./types/clinical";
 import { DEFAULT_SETTINGS } from "./types/clinical";
@@ -80,7 +81,7 @@ export default function Home() {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
   const [inputs, setInputs] = useState<ClinicalData>({ anamnese: "", bioimpedancia: "", laboratoriais: "", genetica: "", wearable: "" });
   const [outputs, setOutputs] = useState<ClinicalOutputs>({ analise: "", conduta: "", receita: "" });
-  const [patientProfile, setPatientProfile] = useState({ name: "", age: "", sex: "", cpf: "", birthDate: "" });
+  const [patientProfile, setPatientProfile] = useState<PatientProfile>({ name: "", age: "", sex: "", cpf: "", birthDate: "" });
   const [engineStatus, setEngineStatus] = useState<EngineStatus>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);

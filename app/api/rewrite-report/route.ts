@@ -55,7 +55,6 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "claude-sonnet-5",
         max_tokens: 16384,
-        temperature: 0.3,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -68,7 +67,8 @@ export async function POST(req: Request) {
     }
 
     const data = JSON.parse(respText);
-    const rawText = data.content?.[0]?.text || "";
+    // Sonnet 5 may prepend a thinking block; find the text block explicitly
+    const rawText = data.content?.find((b: { type: string }) => b.type === "text")?.text || "";
 
     return NextResponse.json({
         ok: true,

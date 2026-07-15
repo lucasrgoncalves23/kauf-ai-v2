@@ -33,7 +33,6 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: "claude-sonnet-5",
         max_tokens: 4096,
-        temperature: 0.4,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -55,14 +54,16 @@ export async function POST(req: Request) {
       });
     }
 
-    if (!data.content || !data.content[0] || !data.content[0].text) {
+    // Sonnet 5 may prepend a thinking block; find the text block explicitly
+    const outputText = data.content?.find((b: { type: string }) => b.type === "text")?.text;
+    if (!outputText) {
       return new Response(JSON.stringify({ error: "Resposta inesperada da IA" }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    return new Response(JSON.stringify({ text: data.content[0].text }), {
+    return new Response(JSON.stringify({ text: outputText }), {
       headers: { "Content-Type": "application/json" },
     });
 

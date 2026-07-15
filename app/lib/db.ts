@@ -188,6 +188,36 @@ export async function getPatient(id: string): Promise<PatientRecord | null> {
   };
 }
 
+/** Find a non-deleted patient by CPF stored in the profile (digits-only match). */
+export async function findPatientByCpf(cpf: string): Promise<PatientRecord | null> {
+  const digits = cpf.replace(/\D/g, "");
+  if (!digits) return null;
+  const sql = getDb();
+
+  const rows = await sql`
+    SELECT id FROM patients
+    WHERE deleted_at IS NULL
+      AND regexp_replace(COALESCE(profile->>'cpf', ''), '\D', '', 'g') = ${digits}
+    LIMIT 1
+  `;
+  return rows.length > 0 ? getPatient(rows[0].id) : null;
+}
+
+/** Find a non-deleted patient by phone stored in the profile (digits-only match). */
+export async function findPatientByPhone(phone: string): Promise<PatientRecord | null> {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+  const sql = getDb();
+
+  const rows = await sql`
+    SELECT id FROM patients
+    WHERE deleted_at IS NULL
+      AND regexp_replace(COALESCE(profile->>'phone', ''), '\D', '', 'g') = ${digits}
+    LIMIT 1
+  `;
+  return rows.length > 0 ? getPatient(rows[0].id) : null;
+}
+
 export async function createPatient(patient: PatientRecord): Promise<PatientRecord> {
   const sql = getDb();
 
