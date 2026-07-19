@@ -25,6 +25,7 @@ export async function processStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let fullText = "";
+  let streamError: string | null = null;
 
   // Handle abort signal
   if (signal) {
@@ -55,6 +56,10 @@ export async function processStream(
               fullText += parsed.text;
               onChunk(parsed.text);
             }
+            // Server reports truncation/refusal/failure as an error event
+            if (parsed.error) {
+              streamError = String(parsed.error);
+            }
           } catch {
             // Skip unparseable lines
           }
@@ -67,6 +72,11 @@ export async function processStream(
       return fullText;
     }
     logger.error("Stream processing error", { error: String(err) });
+  }
+
+  // Surface after draining so partial text stays visible in the editor
+  if (streamError && !signal?.aborted) {
+    throw new Error(streamError);
   }
 
   return fullText;

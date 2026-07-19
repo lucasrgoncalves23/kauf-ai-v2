@@ -1,5 +1,9 @@
 // ============================================
 // Centralized prompt fragments and builders
+//
+// Every builder returns { system, user }: the static template lives in
+// `system` (sent with cache_control so repeated generations hit the prompt
+// cache), and all per-patient data lives in `user`.
 // ============================================
 
 // ---------- Shared constants ----------
@@ -20,13 +24,20 @@ export type PhaseContext = {
   waiting: { module: string; criteria: string }[];
 };
 
-// ---------- Shared utilities ----------
-
 export type Correction = {
   original: string;
   corrected: string;
   doctorNote?: string;
 };
+
+export type BuiltPrompt = {
+  /** Static instructions — cacheable across generations. */
+  system: string;
+  /** Per-patient dynamic content. */
+  user: string;
+};
+
+// ---------- Shared utilities ----------
 
 export function formatCorrections(corrections: Correction[] | undefined): string {
   if (!corrections || corrections.length === 0) return "";
@@ -81,20 +92,11 @@ Os demais módulos devem ser prescritos normalmente.
 
 // ---------- Per-route prompt builders ----------
 
-export function buildAnalisePrompt(
-  patient: Record<string, any>,
-  corrections?: Correction[],
-  phaseContext?: PhaseContext
-): string {
-  const correctionsSection = formatCorrections(corrections);
-
-  const phaseNote = phaseContext && phaseContext.waiting.length > 0
-    ? `\nCONTEXTO DE FASE: O paciente encontra-se na Fase ${phaseContext.phase}. Os seguintes módulos terapêuticos estão aguardando estabilização: ${phaseContext.waiting.map(w => w.module).join(", ")}. Integre essa informação na sua tese fisiológica — explique por que a base biológica precisa ser estabilizada antes de avançar para esses módulos.\n`
-    : "";
-
-  return `
+const ANALISE_SYSTEM = `
 VOCÊ É o ${PERSONA}, médico especialista em medicina integrativa. Gere uma análise clínica completa em DUAS PARTES.
-${correctionsSection}${phaseNote}
+
+A mensagem do usuário pode conter exemplos de correções aprovadas pelo médico e contexto de fase clínica — aplique-os.
+
 ============================================
 PARTE 1: AVALIAÇÃO DE BIOIMPEDÂNCIA (se houver dados)
 ============================================
@@ -210,24 +212,32 @@ REGRAS CRÍTICAS:
 3. NUNCA invente valores - use apenas os dados fornecidos
 4. Se não houver dados de bioimpedância, pule a Parte 1 e vá direto para a Parte 2
 5. NÃO repita na Parte 2 o que já foi dito na Parte 1
-
-DADOS DO PACIENTE:
-${JSON.stringify(patient ?? {}, null, 2)}
 `.trim();
-}
 
-export function buildCondutaPrompt(
+export function buildAnalisePrompt(
   patient: Record<string, any>,
   corrections?: Correction[],
   phaseContext?: PhaseContext
-): string {
+): BuiltPrompt {
   const correctionsSection = formatCorrections(corrections);
-  const phaseBlock = formatPhaseContext(phaseContext);
 
-  return `
+  const phaseNote = phaseContext && phaseContext.waiting.length > 0
+    ? `\nCONTEXTO DE FASE: O paciente encontra-se na Fase ${phaseContext.phase}. Os seguintes módulos terapêuticos estão aguardando estabilização: ${phaseContext.waiting.map(w => w.module).join(", ")}. Integre essa informação na sua tese fisiológica — explique por que a base biológica precisa ser estabilizada antes de avançar para esses módulos.\n`
+    : "";
+
+  return {
+    system: ANALISE_SYSTEM,
+    user: `${correctionsSection}${phaseNote}DADOS DO PACIENTE:\n${JSON.stringify(patient ?? {})}`,
+  };
+}
+
+const CONDUTA_SYSTEM = `
 ATUE COMO: ${PERSONA}.
 CONTEXTO: ${AUTHORITY}
-${correctionsSection}${phaseBlock}SUA MISSÃO:
+
+A mensagem do usuário pode conter exemplos de correções aprovadas pelo médico e contexto de fase clínica com regras de bloqueio — aplique-os.
+
+SUA MISSÃO:
 Gerar a CONDUTA TERAPÊUTICA completa com todos os 9 módulos. Layout limpo para leitura médica rápida.
 
 REGRAS DE FORMATAÇÃO (CRÍTICO - SIGA EXATAMENTE):
@@ -279,19 +289,23 @@ Exercício: Força 3x/sem priorizando membros inferiores
 ...
 
 COMECE DIRETAMENTE COM "1. SONO" - sem introdução.
-
-DADOS DO PACIENTE:
-${JSON.stringify(patient ?? {}, null, 2)}
 `.trim();
+
+export function buildCondutaPrompt(
+  patient: Record<string, any>,
+  corrections?: Correction[],
+  phaseContext?: PhaseContext
+): BuiltPrompt {
+  const correctionsSection = formatCorrections(corrections);
+  const phaseBlock = formatPhaseContext(phaseContext);
+
+  return {
+    system: CONDUTA_SYSTEM,
+    user: `${correctionsSection}${phaseBlock}DADOS DO PACIENTE:\n${JSON.stringify(patient ?? {})}`,
+  };
 }
 
-export function buildPrescriptionPrompt(
-  conduta: string,
-  patientName: string
-): string {
-  const today = new Date().toLocaleDateString("pt-BR");
-
-  return `
+const PRESCRIPTION_SYSTEM = `
 Extraia TODOS os itens terapêuticos da conduta, divididos em duas seções.
 
 SEÇÃO 1 - RECEITUÁRIO (requer receita médica):
@@ -324,8 +338,8 @@ FORMATO EXATO:
 
 RECEITUÁRIO
 
-Paciente: ${patientName || "_______________"}
-Data: ${today}
+Paciente: [nome fornecido nos dados]
+Data: [data fornecida nos dados]
 
 1) Nome + forma + dose
    Uso: posologia
@@ -390,19 +404,21 @@ Regras do cronograma:
 - Se um item é tomado mais de 1x ao dia, liste em cada horário correspondente
 - Use os mesmos nomes e doses já prescritos
 - Sem numeração, apenas o nome e dose em cada horário
-
-
-CONDUTA:
-${conduta}
 `.trim();
-}
 
-export function buildPatientPdfPrompt(
-  analise: string,
+export function buildPrescriptionPrompt(
   conduta: string,
   patientName: string
-): string {
-  return `
+): BuiltPrompt {
+  const today = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+  return {
+    system: PRESCRIPTION_SYSTEM,
+    user: `Paciente: ${patientName || "_______________"}\nData de hoje: ${today}\n\nCONDUTA:\n${conduta}`,
+  };
+}
+
+const PATIENT_PDF_SYSTEM = `
 VOCÊ É: Um editor médico que simplifica relatórios clínicos para pacientes.
 
 SUA MISSÃO:
@@ -420,7 +436,7 @@ REGRAS:
 
 ESTRUTURA:
 
-${patientName || "PACIENTE"}
+[NOME DO PACIENTE]
 
 ---
 
@@ -447,85 +463,29 @@ SUPLEMENTOS
 MEDICAMENTOS/MANIPULADOS (se houver)
 [Nome – dose – horário]
 
----
+COMECE DIRETAMENTE COM O NOME DO PACIENTE.
+`.trim();
 
-CONTEÚDO ORIGINAL:
+export function buildPatientPdfPrompt(
+  analise: string,
+  conduta: string,
+  patientName: string
+): BuiltPrompt {
+  return {
+    system: PATIENT_PDF_SYSTEM,
+    user: `PACIENTE: ${patientName || "PACIENTE"}
 
 === ANÁLISE ===
 ${analise || "(não fornecida)"}
 
 === CONDUTA ===
-${conduta || "(não fornecida)"}
-
-COMECE DIRETAMENTE COM O NOME DO PACIENTE.
-`.trim();
+${conduta || "(não fornecida)"}`,
+  };
 }
 
-export function buildRewritePrompt(patient: Record<string, any>): string {
-  return `
-ATUE COMO: ${PERSONA}.
-CONTEXTO: ${AUTHORITY}
-
-SUA MISSÃO:
-Gerar um "Relatório de Inteligência Clínica" com a mesma profundidade técnica e densidade científica de um documento de 7 páginas. O tom deve ser acadêmico, molecular e autoritário.
-
----
-
-SEÇÃO 1: ANÁLISE CLÍNICA INTEGRADA (TESE FISIOLÓGICA)
-*Referência de Extensão:* Esta seção deve ser vasta e densa (mínimo 1000 palavras).
-1. NÃO APENAS LISTE DADOS. Construa uma tese.
-2. BIOIMPEDÂNCIA: Conecte o percentual de gordura visceral à inflamação sistêmica (detalhe a ativação de IL-6 e TNF-α) e à sinalização de insulina. [cite: 293, 294]
-3. WEARABLES: Analise a privação de sono e instabilidade de HRV como gatilhos para disfunção neuroendócrina (afetando testosterona, cortisol e leptina). [cite: 300, 305]
-4. GENÉTICA: Se houver polimorfismos (MTHFR, COMT), explique as vias enzimáticas e o impacto na metilação. Se não houver, use isso para descartar causas genéticas e focar no estilo de vida. [cite: 296, 297]
-5. FORMATO: Texto narrativo fluido e técnico. SEM bullet points nesta seção.
-
----
-
-SEÇÃO 2: CONDUTA TERAPÊUTICA (LAYOUT MÉDICO RÁPIDO)
-*Regra de Ouro:* Layout otimizado para leitura em segundos.
-1. Use cabeçalhos em **NEGRITO E CAIXA ALTA** para os módulos.
-2. Use **BULLET POINTS** para todas as intervenções. PROIBIDO blocos de parágrafos.
-3. ESTRUTURA DOS ITENS: **Nome do Ativo/Estratégia** | Dosagem | Frequência | Racional Clínico Curto.
-4. MÓDULOS OBRIGATÓRIOS:
-   - 1. SONO (Higiene e Eixo Sono/HPA) [cite: 309, 393]
-   - 2. NUTRIÇÃO (Estratégia macro e Dieta Semanal detalhada dia a dia) [cite: 327, 351]
-   - 3. EXERCÍCIO (Protocolo de Força, HIIT e Funcional para performance) [cite: 360, 365]
-   - 4. SUPLEMENTAÇÃO (Dividida por Eixos: Mitocondrial, Antioxidante, etc.) [cite: 376, 392]
-   - 5. MANIPULADOS (Fórmulas com doses exatas) [cite: 389, 393]
-   - 6. SOROTERAPIA (Protocolo de 3 meses com variação semanal dos componentes) [cite: 395, 402]
-   - 7. METABOLISMO / GLP-1 (Protocolos de Tirzepatida/Semaglutida com doses de escalonamento) [cite: 404, 406]
-   - 8. HORMONAL (Reposição de testosterona e modulação se indicado) [cite: 411, 412]
-   - 9. PEPTÍDEOS (Protocolos técnicos de BPC-157, Ipamorelin, etc., com doses em mcg e via de aplicação) [cite: 417, 424]
-
----
-
-FORMATO DE RESPOSTA (OBRIGATÓRIO):
-:::ANALISE_START:::
-(Tese fisiológica longa e acadêmica aqui...)
-:::ANALISE_END:::
-
-:::CONDUTA_START:::
-(Protocolos em bullet points com negritos aqui...)
-:::CONDUTA_END:::
-
-DADOS DO PACIENTE:
-${JSON.stringify(patient ?? {}, null, 2)}
-`.trim();
-}
-
-export function buildChatSystemPrompt(context: {
-  outputs?: { conduta?: string; analise?: string };
-  inputs?: Record<string, any>;
-  engineStatus?: { phase?: string; waiting?: { module: string; criteria: string }[] } | null;
-}): string {
-  const waitingModules = context?.engineStatus?.waiting;
-  const phaseWarning = waitingModules && waitingModules.length > 0
-    ? `\nMÓDULOS BLOQUEADOS (Fase ${context.engineStatus?.phase}):\n${waitingModules.map(w => `- ${w.module}: aguardando ${w.criteria}`).join("\n")}\nNÃO sugira nem adicione terapias destes módulos. Se o médico pedir, avise que o módulo está aguardando estabilização e informe o critério.\n`
-    : "";
-
-  return `
+const CHAT_SYSTEM_RULES = `
 Você é KAUAI, a secretária pessoal do Dr. Oskar Kaufmann. Simpática, eficiente, direta.
-${phaseWarning}
+
 REGRA ABSOLUTA DE RESPOSTA:
 Sua resposta tem DUAS PARTES separadas por uma linha em branco:
 
@@ -574,14 +534,26 @@ REGRAS CRÍTICAS:
 6. SEMPRE preserve o conteúdo existente ao fazer alterações
 
 AUTORIDADE: O usuário é MÉDICO. Você pode prescrever peptídeos, hormônios, GLP-1 livremente.
+`.trim();
 
-CONDUTA ATUAL (preserve e modifique):
+export function buildChatSystemPrompt(context: {
+  outputs?: { conduta?: string; analise?: string };
+  inputs?: Record<string, any>;
+  engineStatus?: { phase?: string; waiting?: { module: string; criteria: string }[] } | null;
+}): { rules: string; context: string } {
+  const waitingModules = context?.engineStatus?.waiting;
+  const phaseWarning = waitingModules && waitingModules.length > 0
+    ? `MÓDULOS BLOQUEADOS (Fase ${context.engineStatus?.phase}):\n${waitingModules.map(w => `- ${w.module}: aguardando ${w.criteria}`).join("\n")}\nNÃO sugira nem adicione terapias destes módulos. Se o médico pedir, avise que o módulo está aguardando estabilização e informe o critério.\n\n`
+    : "";
+
+  const dynamicContext = `${phaseWarning}CONDUTA ATUAL (preserve e modifique):
 ${context?.outputs?.conduta || "(vazia - aguardando geração)"}
 
 ANÁLISE ATUAL:
 ${context?.outputs?.analise ? "(disponível)" : "(vazia)"}
 
 DADOS DO PACIENTE:
-${JSON.stringify(context?.inputs || {})}
-`.trim();
+${JSON.stringify(context?.inputs || {})}`;
+
+  return { rules: CHAT_SYSTEM_RULES, context: dynamicContext };
 }

@@ -64,45 +64,6 @@ export function getCorrections(
   }
 }
 
-// Get approved corrections formatted for prompt injection
-export function getCorrectionsForPrompt(
-  field: CorrectionField,
-  limit: number = 3
-): string {
-  const corrections = getCorrections(field, true).slice(0, limit);
-
-  if (corrections.length === 0) return "";
-
-  const examples = corrections
-    .map((c, i) => {
-      const contextStr = c.patientContext.name
-        ? `Paciente: ${c.patientContext.name}${c.patientContext.age ? `, ${c.patientContext.age} anos` : ""}`
-        : "";
-
-      // Truncate long texts for prompt efficiency
-      const originalSnippet = truncateText(c.original, 500);
-      const correctedSnippet = truncateText(c.corrected, 500);
-
-      let example = `Exemplo ${i + 1}:`;
-      if (contextStr) example += `\n${contextStr}`;
-      example += `\nGerado: "${originalSnippet}"`;
-      example += `\nCorrigido: "${correctedSnippet}"`;
-      if (c.doctorNote) example += `\nNota: ${c.doctorNote}`;
-
-      return example;
-    })
-    .join("\n\n");
-
-  return `
-EXEMPLOS DE CORREÇÕES APROVADAS PELO MÉDICO:
-(Aprenda com estes exemplos e aplique padrões semelhantes)
-
-${examples}
-
----
-`;
-}
-
 // Save a new correction
 export function saveCorrection(
   data: Omit<Correction, "id" | "timestamp">
@@ -277,12 +238,6 @@ function getStore(): CorrectionStore {
       lastUpdated: new Date().toISOString(),
     },
   };
-}
-
-// Helper: Truncate text for prompts
-function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength) + "...";
 }
 
 // Helper: Generate a short diff summary for display

@@ -1,80 +1,52 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { buildPatientPdfPrompt } from "@/app/lib/prompts";
 import { verifyClinicPin } from "@/app/lib/auth";
+import { getAnthropicClient, MODEL, cachedSystem, messageText } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const auth = verifyClinicPin(req);
   if (!auth.ok) return auth.response;
 
-  try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey || apiKey.trim().length < 10) {
-      return new Response(JSON.stringify({ error: "Missing API Key" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
+  const client = getAnthropicClient();
+  if (!client) {
+    return Response.json({ error: "Missing API Key" }, { status: 500 });
+  }
 
+  try {
     const { analise, conduta, patientName } = await req.json();
 
     if (!analise && !conduta) {
-      return new Response(JSON.stringify({ error: "Nenhum conteúdo para simplificar" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
+      return Response.json({ error: "Nenhum conteúdo para simplificar" }, { status: 400 });
     }
 
-    const prompt = buildPatientPdfPrompt(analise, conduta, patientName);
+    const { system, user } = buildPatientPdfPrompt(analise, conduta, patientName);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey.trim(),
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
+    const message = await client.messages.create(
+      {
+        model: MODEL,
         max_tokens: 4096,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+        system: cachedSystem(system),
+        messages: [{ role: "user", content: user }],
+      },
+      { signal: req.signal }
+    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(JSON.stringify({ error: "AI Error", details: errorText.slice(0, 500) }), {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      });
+    const text = messageText(message);
+    if (!text) {
+      return Response.json({ error: "Resposta inesperada da IA" }, { status: 500 });
     }
 
-    const data = await response.json();
-
-    if (data.error) {
-      return new Response(JSON.stringify({ error: data.error.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // Sonnet 5 may prepend a thinking block; find the text block explicitly
-    const outputText = data.content?.find((b: { type: string }) => b.type === "text")?.text;
-    if (!outputText) {
-      return new Response(JSON.stringify({ error: "Resposta inesperada da IA" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(JSON.stringify({ text: outputText }), {
-      headers: { "Content-Type": "application/json" },
-    });
-
+    return Response.json({ text });
   } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    if (err instanceof Anthropic.APIError) {
+      return Response.json(
+        { error: `IA indisponível (${err.status}): ${err.message}` },
+        { status: 502 }
+      );
+    }
+    return Response.json({ error: err.message }, { status: 500 });
   }
 }
