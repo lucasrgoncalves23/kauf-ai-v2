@@ -16,6 +16,7 @@ import type {
   EngineStatus,
 } from "../types/clinical";
 import type { AuditEvent } from "./audit";
+import type { Correction } from "./corrections";
 
 // Get database URL from environment
 function getDb() {
@@ -462,6 +463,57 @@ export async function getAuditEvents(filters?: {
     patientName: row.patientName,
     ...row.data,
   })) as AuditEvent[];
+}
+
+// --- CORRECTIONS ---
+
+export async function getAllCorrectionsDb(): Promise<Correction[]> {
+  const sql = getDb();
+
+  const rows = await sql`
+    SELECT id, timestamp, field, original, corrected,
+           patient_context as "patientContext", doctor_note as "doctorNote", approved
+    FROM corrections
+    ORDER BY timestamp DESC
+  `;
+
+  return rows.map((row) => ({
+    id: row.id,
+    timestamp: row.timestamp instanceof Date ? row.timestamp.toISOString() : row.timestamp,
+    field: row.field,
+    original: row.original,
+    corrected: row.corrected,
+    patientContext: row.patientContext || {},
+    doctorNote: row.doctorNote ?? undefined,
+    approved: !!row.approved,
+  })) as Correction[];
+}
+
+export async function upsertCorrectionDb(c: Correction): Promise<void> {
+  const sql = getDb();
+
+  await sql`
+    INSERT INTO corrections (id, timestamp, field, original, corrected, patient_context, doctor_note, approved)
+    VALUES (
+      ${c.id},
+      ${c.timestamp},
+      ${c.field},
+      ${c.original},
+      ${c.corrected},
+      ${JSON.stringify(c.patientContext || {})},
+      ${c.doctorNote ?? null},
+      ${c.approved}
+    )
+    ON CONFLICT (id) DO UPDATE SET
+      doctor_note = EXCLUDED.doctor_note,
+      approved = EXCLUDED.approved
+  `;
+}
+
+export async function deleteCorrectionDb(id: string): Promise<boolean> {
+  const sql = getDb();
+  const result = await sql`DELETE FROM corrections WHERE id = ${id} RETURNING id`;
+  return result.length > 0;
 }
 
 // --- HEALTH CHECK ---

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   saveCorrection,
   getCorrections,
   isSignificantChange,
+  syncCorrectionsFromServer,
   type Correction,
   type CorrectionField,
 } from "../lib/corrections";
@@ -22,6 +23,14 @@ export function useCorrectionCapture(
   function refreshCorrectionsList() {
     setCorrectionsList(getCorrections());
   }
+
+  // Pull corrections from the server on load so the AI's learned examples
+  // follow the doctor across devices
+  useEffect(() => {
+    syncCorrectionsFromServer().then((synced) => {
+      if (synced) setCorrectionsList(getCorrections());
+    });
+  }, []);
 
   function handleOutputBlur(field: CorrectionField) {
     const original = originalOutputs[field];

@@ -1,4 +1,11 @@
 // Correction feedback system for continuous learning
+//
+// localStorage is the fast synchronous cache (generation reads from it);
+// every mutation is also pushed to the server so corrections follow the
+// doctor across devices. syncCorrectionsFromServer() reconciles on load.
+
+import { getPinHeaders } from "./api-client";
+import { logger } from "./logger";
 
 export type CorrectionField = "analise" | "conduta" | "receita";
 
@@ -31,6 +38,61 @@ const STORAGE_KEY = "kai-corrections";
 // Generate unique ID
 function generateId(): string {
   return `corr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// --- Server sync (best-effort; localStorage keeps working offline) ---
+
+function pushCorrectionToServer(correction: Correction): void {
+  if (typeof window === "undefined") return;
+  fetch("/api/corrections", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getPinHeaders() },
+    body: JSON.stringify(correction),
+  }).catch((e) => logger.warn("Failed to push correction to server", { error: String(e) }));
+}
+
+function deleteCorrectionOnServer(id: string): void {
+  if (typeof window === "undefined") return;
+  fetch(`/api/corrections/${id}`, {
+    method: "DELETE",
+    headers: getPinHeaders(),
+  }).catch((e) => logger.warn("Failed to delete correction on server", { error: String(e) }));
+}
+
+/**
+ * Reconcile with the server: pull the server list, push any local-only
+ * corrections up, and store the union locally. Returns true if it ran.
+ */
+export async function syncCorrectionsFromServer(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const res = await fetch("/api/corrections", { headers: getPinHeaders() });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const serverCorrections: Correction[] = data.corrections || [];
+
+    const store = getStore();
+    const serverIds = new Set(serverCorrections.map((c) => c.id));
+    const localOnly = store.corrections.filter((c) => !serverIds.has(c.id));
+
+    // Push corrections created while offline / on this device only
+    for (const c of localOnly) {
+      pushCorrectionToServer(c);
+    }
+
+    const merged = [...serverCorrections, ...localOnly];
+    store.corrections = merged;
+    store.stats.approvedExamples = merged.filter((c) => c.approved).length;
+    store.stats.totalEdits = Math.max(store.stats.totalEdits, merged.length);
+    store.stats.lastUpdated = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+
+    return true;
+  } catch (e) {
+    logger.warn("Corrections sync failed", { error: String(e) });
+    return false;
+  }
 }
 
 // Get all corrections from localStorage
@@ -84,6 +146,7 @@ export function saveCorrection(
   store.stats.lastUpdated = new Date().toISOString();
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  pushCorrectionToServer(correction);
 
   return correction;
 }
@@ -105,6 +168,7 @@ export function approveCorrection(id: string, note?: string): boolean {
   store.stats.lastUpdated = new Date().toISOString();
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  pushCorrectionToServer(correction);
   return true;
 }
 
@@ -124,6 +188,7 @@ export function unapproveCorrection(id: string): boolean {
 
   store.stats.lastUpdated = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  pushCorrectionToServer(correction);
   return true;
 }
 
@@ -145,6 +210,7 @@ export function deleteCorrection(id: string): boolean {
   store.stats.lastUpdated = new Date().toISOString();
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  deleteCorrectionOnServer(id);
   return true;
 }
 
@@ -161,6 +227,7 @@ export function updateCorrectionNote(id: string, note: string): boolean {
   store.stats.lastUpdated = new Date().toISOString();
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  pushCorrectionToServer(correction);
   return true;
 }
 
@@ -207,6 +274,11 @@ export function getCorrectionStats(): CorrectionStore["stats"] {
 // Clear all corrections (use with caution)
 export function clearAllCorrections(): void {
   if (typeof window === "undefined") return;
+
+  // Also remove from the server so they don't come back on next sync
+  for (const c of getStore().corrections) {
+    deleteCorrectionOnServer(c.id);
+  }
 
   localStorage.setItem(
     STORAGE_KEY,

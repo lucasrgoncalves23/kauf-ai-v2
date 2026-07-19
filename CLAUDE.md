@@ -82,7 +82,7 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | `/api/generate-conduta` | Streamed 9-module treatment plan (SSE) |
 | `/api/generate-prescription` | Streamed receituário extraction from conduta (SSE) |
 | `/api/generate-patient-pdf` | Patient-friendly plan (non-streaming) |
-| `/api/chat-assistant` | KAUAI copilot; replies may embed `:::COMMAND:::` JSON to update the conduta |
+| `/api/chat-assistant` | KAUAI copilot; replies may embed multiple `:::COMMAND:::` JSON blocks (`edit` find/replace, `append`, `set`) targeting analise/conduta/receita |
 | `/api/import-pdf` | PDF/image OCR (pdf-parse fast path → Claude Vision fallback) |
 | `/api/patients`, `/api/patients/[id]`, `/api/patients/[id]/consultas`, `/api/consultas` | Patient/consulta CRUD (Neon) |
 | `/api/verify-pin` | PIN login (rate-limited) |
