@@ -44,12 +44,15 @@ type SessionActions = {
  * - Saves to both database and localStorage (localStorage as offline cache)
  * - Manages dark mode class on document
  */
+export type SaveStatus = "saved" | "saving" | "offline";
+
 export function useSessionPersistence(
   state: Omit<SessionState, "isHydrated">,
   actions: SessionActions
-): { isHydrated: boolean; usingDatabase: boolean } {
+): { isHydrated: boolean; usingDatabase: boolean; saveStatus: SaveStatus } {
   const [isHydrated, setIsHydrated] = useState(false);
   const [usingDatabase, setUsingDatabase] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSaveRef = useRef<PatientRecord | null>(null);
   const patientsRef = useRef<Record<string, PatientRecord>>({});
@@ -187,10 +190,12 @@ export function useSessionPersistence(
       // Try to save to database (non-blocking)
       try {
         const { savedToDatabase } = await savePatient(updatedPatient);
+        setSaveStatus(savedToDatabase ? "saved" : "offline");
         if (savedToDatabase && !usingDatabase) {
           setUsingDatabase(true);
         }
       } catch (e) {
+        setSaveStatus("offline");
         logger.warn("Failed to save to database", { error: String(e) });
       }
     },
@@ -223,6 +228,7 @@ export function useSessionPersistence(
     setPatients((prev) => ({ ...prev, [currentPatientId]: updatedPatient }));
 
     // Debounce the actual save (500ms); track pending so tab-close can flush it
+    setSaveStatus("saving");
     pendingSaveRef.current = updatedPatient;
     saveTimeoutRef.current = setTimeout(() => {
       pendingSaveRef.current = null;
@@ -301,5 +307,5 @@ export function useSessionPersistence(
     }
   }, [settings.ui.darkMode]);
 
-  return { isHydrated, usingDatabase };
+  return { isHydrated, usingDatabase, saveStatus };
 }

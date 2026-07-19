@@ -14,7 +14,14 @@ type HeaderBarProps = {
   onOpenSettings: () => void;
   onSaveConsulta?: () => void;
   isSavingConsulta?: boolean;
+  saveStatus?: "saved" | "saving" | "offline";
 };
+
+const SAVE_STATUS_UI = {
+  saved: { dot: "bg-emerald-500", text: "Salvo", textColor: "text-slate-400 dark:text-slate-500" },
+  saving: { dot: "bg-amber-400 animate-pulse", text: "Salvando...", textColor: "text-slate-400 dark:text-slate-500" },
+  offline: { dot: "bg-red-500", text: "Offline — não salvo no servidor", textColor: "text-red-500 dark:text-red-400" },
+} as const;
 
 export function HeaderBar({
   compact,
@@ -28,14 +35,16 @@ export function HeaderBar({
   onOpenSettings,
   onSaveConsulta,
   isSavingConsulta,
+  saveStatus,
 }: HeaderBarProps) {
+  const statusUi = saveStatus ? SAVE_STATUS_UI[saveStatus] : null;
   return (
     <div
       className={`flex items-center justify-between gap-8 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm print:hidden transition-colors duration-300 ${
         compact ? "px-5 py-4 mb-3" : "px-8 py-7 mb-6"
       }`}
     >
-      <div>
+      <div className="flex items-center gap-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/ik-logo.png"
@@ -48,6 +57,15 @@ export function HeaderBar({
           alt="Instituto Kaufmann"
           className={`w-auto hidden dark:block ${compact ? "h-14" : "h-20"}`}
         />
+        {statusUi && (
+          <div
+            className={`flex items-center gap-1.5 whitespace-nowrap text-[10px] font-medium ${statusUi.textColor}`}
+            title="Status de sincronização com o servidor"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${statusUi.dot}`}></span>
+            {statusUi.text}
+          </div>
+        )}
       </div>
       <div className="flex items-center gap-2">
         {onSaveConsulta && (

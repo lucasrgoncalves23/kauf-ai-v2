@@ -172,7 +172,7 @@ export default function Home() {
     handleOutputBlur, handleSaveAsExample, refreshCorrectionsList,
   } = useCorrectionCapture(outputs, patientProfile, currentPatientId, setToast);
 
-  useSessionPersistence(
+  const { saveStatus } = useSessionPersistence(
     { inputs, outputs, patientProfile, chatMessages, engineStatus, patients, currentPatientId, settings },
     { setInputs, setOutputs, setPatientProfile, setChatMessages, setEngineStatus, setPatients, setCurrentPatientId, setSettings }
   );
@@ -219,6 +219,7 @@ export default function Home() {
     isRunningAnalise, canRunAnalise, handleRunAnalise, handleStopAnalise,
     isRunningConduta, canRunConduta, handleRunConduta, handleStopConduta,
     isRunningReceita, canRunReceita, handleRunReceita, handleStopReceita,
+    previousOutputs, handleRestoreOutput,
   } = useGenerationWorkflow({
     inputs, outputs, setOutputs, setOriginalOutputs, setToast,
     currentPatientId, patientName: patientProfile.name,
@@ -236,11 +237,38 @@ export default function Home() {
   // --- EFFECTS ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && fullscreenPanel) setFullscreenPanel(null);
+      const mod = e.metaKey || e.ctrlKey;
+
+      // Cmd/Ctrl+S: salvar consulta
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        handleSaveConsulta();
+        return;
+      }
+
+      // Cmd/Ctrl+Enter: run the next pending generation step
+      if (mod && e.key === "Enter") {
+        e.preventDefault();
+        if (isRunningAnalise || isRunningConduta || isRunningReceita) return;
+        if (!outputs.analise.trim()) handleRunAnalise();
+        else if (!outputs.conduta.trim()) handleRunConduta();
+        else if (!outputs.receita.trim()) handleRunReceita();
+        else setToast({ message: "Análise, Conduta e Receita já geradas", type: "info" });
+        return;
+      }
+
+      // Esc: close whatever is open
+      if (e.key === "Escape") {
+        setFullscreenPanel(null);
+        setShowSettings(false);
+        setShowCorrectionsPanel(false);
+        setShowPatientSwitcher(false);
+        setShowExportDropdown(false);
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [fullscreenPanel]);
+  });
 
   useEffect(() => {
     const text = inputs.anamnese;
@@ -342,6 +370,7 @@ export default function Home() {
                 onOpenSettings={() => setShowSettings(true)}
                 onSaveConsulta={handleSaveConsulta}
                 isSavingConsulta={isSavingConsulta}
+                saveStatus={saveStatus}
               />
 
               <div className={`flex-1 overflow-y-auto pr-2 ${compact ? 'space-y-4 pb-6' : 'space-y-8 pb-10'}`}>
@@ -384,6 +413,8 @@ export default function Home() {
                     onFullscreen={() => setFullscreenPanel('analise')}
                     compact={compact}
                     minHeight={compact ? "min-h-[350px]" : "min-h-[600px]"}
+                    canRestore={!!previousOutputs.analise && previousOutputs.analise !== outputs.analise}
+                    onRestore={() => handleRestoreOutput("analise")}
                   />
                   <OutputPanel
                     label="Conduta & Planejamento"
@@ -395,6 +426,8 @@ export default function Home() {
                     onFullscreen={() => setFullscreenPanel('conduta')}
                     compact={compact}
                     minHeight={compact ? "min-h-[180px]" : "min-h-[300px]"}
+                    canRestore={!!previousOutputs.conduta && previousOutputs.conduta !== outputs.conduta}
+                    onRestore={() => handleRestoreOutput("conduta")}
                   />
                   <OutputPanel
                     label="Receita Médica"
@@ -406,6 +439,8 @@ export default function Home() {
                     onFullscreen={() => setFullscreenPanel('receita')}
                     compact={compact}
                     minHeight={compact ? "min-h-[180px]" : "min-h-[300px]"}
+                    canRestore={!!previousOutputs.receita && previousOutputs.receita !== outputs.receita}
+                    onRestore={() => handleRestoreOutput("receita")}
                   />
                 </section>
               </div>

@@ -19,6 +19,8 @@ export function MedicalReportPrint({
   const [dateStr, setDateStr] = useState("");
   const [reportId, setReportId] = useState("");
 
+  // Recompute per export (not per mount): overnight sessions must not print
+  // yesterday's date, and each report gets its own ID
   useEffect(() => {
     setDateStr(
       new Date().toLocaleDateString("pt-BR", {
@@ -28,23 +30,53 @@ export function MedicalReportPrint({
       })
     );
     setReportId(Math.random().toString(36).slice(2, 8).toUpperCase());
-  }, []);
+  }, [patientVersion, prescriptionVersion]);
 
   // Prescription version
   if (prescriptionVersion) {
     return (
       <div className="hidden print:block bg-white text-black p-10 max-w-[210mm] mx-auto min-h-screen">
-        <div className="text-center border-b-2 border-slate-300 pb-6 mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-wide">RECEITUÁRIO</h1>
-          <p className="text-sm text-slate-500 mt-1">Kauf - Medicina Integrativa</p>
+        <div className="flex justify-between items-end border-b-2 border-slate-900 pb-4 mb-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/ik-logo.png" alt="Instituto Kaufmann" className="h-20 w-auto" />
+          <div className="text-right">
+            <h1 className="text-xl font-bold text-slate-900 tracking-wide">RECEITUÁRIO</h1>
+            <p className="text-sm font-bold text-slate-900 mt-1">{dateStr}</p>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-8 grid grid-cols-2 gap-6 break-inside-avoid">
+          <div>
+            <span className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">
+              Paciente
+            </span>
+            <span className="block text-base font-medium text-slate-900">
+              {profile.name || "_______________________"}
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">
+              CPF
+            </span>
+            <span className="block text-base font-medium text-slate-900">
+              {profile.cpf || "_______________________"}
+            </span>
+          </div>
         </div>
 
         <div className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap font-mono">
           {prescriptionVersion}
         </div>
 
-        <div className="mt-16 pt-6 border-t border-slate-200 text-center break-inside-avoid">
-          <p className="text-[10px] text-slate-400">Documento gerado em {dateStr}</p>
+        <div className="mt-16 pt-6 text-center break-inside-avoid">
+          <div className="inline-block">
+            <div className="border-t border-slate-900 w-72 mx-auto mb-2"></div>
+            <p className="text-sm font-bold text-slate-900">Dr. Oskar Kaufmann</p>
+            <p className="text-xs text-slate-600">CRM-SP 104.028</p>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-8">
+            Instituto Kaufmann — Medicina Integrativa · Documento emitido em {dateStr}
+          </p>
         </div>
       </div>
     );

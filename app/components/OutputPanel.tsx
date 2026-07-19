@@ -28,6 +28,8 @@ type OutputPanelProps = {
   onFullscreen: () => void;
   compact: boolean;
   minHeight: string;
+  canRestore?: boolean;
+  onRestore?: () => void;
 };
 
 export function OutputPanel({
@@ -40,6 +42,8 @@ export function OutputPanel({
   onFullscreen,
   compact,
   minHeight,
+  canRestore,
+  onRestore,
 }: OutputPanelProps) {
   const colors = colorMap[color];
 
@@ -50,15 +54,29 @@ export function OutputPanel({
           <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`}></span>
           <span className={`text-[10px] font-bold uppercase ${colors.label} tracking-widest`}>{label}</span>
         </div>
-        <button
-          onClick={onFullscreen}
-          className={`no-print p-1.5 rounded-lg text-slate-400 ${colors.button} transition-colors`}
-          title="Editar em tela cheia"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {canRestore && onRestore && (
+            <button
+              onClick={onRestore}
+              className={`no-print flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-medium text-slate-400 ${colors.button} transition-colors`}
+              title="Restaurar versão anterior"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v1m-15-6l4-4m-4 4l4 4" />
+              </svg>
+              Restaurar
+            </button>
+          )}
+          <button
+            onClick={onFullscreen}
+            className={`no-print p-1.5 rounded-lg text-slate-400 ${colors.button} transition-colors`}
+            title="Editar em tela cheia"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+        </div>
       </div>
       <DataBox
         title={dataBoxTitle}

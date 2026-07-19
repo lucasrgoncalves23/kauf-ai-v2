@@ -32,6 +32,24 @@ export function useGenerationWorkflow({
   const [isRunningAnalise, setIsRunningAnalise] = useState(false);
   const [isRunningConduta, setIsRunningConduta] = useState(false);
   const [isRunningReceita, setIsRunningReceita] = useState(false);
+  // Last version of each output before it was regenerated, for "Restaurar"
+  const [previousOutputs, setPreviousOutputs] = useState<Partial<ClinicalOutputs>>({});
+
+  function stashPrevious(field: keyof ClinicalOutputs) {
+    const current = outputs[field];
+    if (current.trim()) {
+      setPreviousOutputs((p) => ({ ...p, [field]: current }));
+    }
+  }
+
+  function handleRestoreOutput(field: keyof ClinicalOutputs) {
+    const previous = previousOutputs[field];
+    if (!previous) return;
+    const replaced = outputs[field];
+    setPreviousOutputs((p) => ({ ...p, [field]: replaced }));
+    setOutputs((prev) => ({ ...prev, [field]: previous }));
+    setToast({ message: "Versão anterior restaurada", type: "success" });
+  }
 
   const analiseAbortRef = useRef<AbortController | null>(null);
   const condutaAbortRef = useRef<AbortController | null>(null);
@@ -61,6 +79,7 @@ export function useGenerationWorkflow({
     analiseAbortRef.current = new AbortController();
 
     setIsRunningAnalise(true);
+    stashPrevious("analise");
     setOutputs((prev) => ({ ...prev, analise: "" }));
 
     try {
@@ -131,6 +150,7 @@ export function useGenerationWorkflow({
     condutaAbortRef.current = new AbortController();
 
     setIsRunningConduta(true);
+    stashPrevious("conduta");
     setOutputs((prev) => ({ ...prev, conduta: "" }));
 
     try {
@@ -201,6 +221,7 @@ export function useGenerationWorkflow({
     receitaAbortRef.current = new AbortController();
 
     setIsRunningReceita(true);
+    stashPrevious("receita");
     setOutputs((prev) => ({ ...prev, receita: "" }));
 
     try {
@@ -257,28 +278,6 @@ export function useGenerationWorkflow({
     receitaAbortRef.current?.abort();
   }
 
-  // --- RUN ALL (Análise + Conduta in parallel) ---
-  const [isRunningAll, setIsRunningAll] = useState(false);
-
-  async function handleRunAll() {
-    if (!canRunAnalise() || !canRunConduta()) {
-      setToast({ message: "Preencha pelo menos a Anamnese para gerar", type: "error" });
-      return;
-    }
-
-    setIsRunningAll(true);
-    try {
-      await Promise.all([handleRunAnalise(), handleRunConduta()]);
-    } finally {
-      setIsRunningAll(false);
-    }
-  }
-
-  function handleStopAll() {
-    analiseAbortRef.current?.abort();
-    condutaAbortRef.current?.abort();
-  }
-
   return {
     // Analise
     isRunningAnalise,
@@ -295,5 +294,8 @@ export function useGenerationWorkflow({
     canRunReceita,
     handleRunReceita,
     handleStopReceita,
+    // Restore
+    previousOutputs,
+    handleRestoreOutput,
   };
 }
