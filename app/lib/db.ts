@@ -197,7 +197,7 @@ export async function findPatientByCpf(cpf: string): Promise<PatientRecord | nul
   const rows = await sql`
     SELECT id FROM patients
     WHERE deleted_at IS NULL
-      AND regexp_replace(COALESCE(profile->>'cpf', ''), '\D', '', 'g') = ${digits}
+      AND regexp_replace(COALESCE(profile->>'cpf', ''), '[^0-9]', '', 'g') = ${digits}
     LIMIT 1
   `;
   return rows.length > 0 ? getPatient(rows[0].id) : null;
@@ -212,7 +212,7 @@ export async function findPatientByPhone(phone: string): Promise<PatientRecord |
   const rows = await sql`
     SELECT id FROM patients
     WHERE deleted_at IS NULL
-      AND regexp_replace(COALESCE(profile->>'phone', ''), '\D', '', 'g') = ${digits}
+      AND regexp_replace(COALESCE(profile->>'phone', ''), '[^0-9]', '', 'g') = ${digits}
     LIMIT 1
   `;
   return rows.length > 0 ? getPatient(rows[0].id) : null;

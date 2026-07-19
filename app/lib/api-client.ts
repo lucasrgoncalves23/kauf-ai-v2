@@ -40,6 +40,12 @@ function getHeaders(): HeadersInit {
   return headers;
 }
 
+// PIN-only headers, for callers that set their own Content-Type (or none, e.g. FormData)
+export function getPinHeaders(): Record<string, string> {
+  const pin = getClinicPin();
+  return pin ? { "X-Clinic-Pin": pin } : {};
+}
+
 // --- API Functions ---
 
 export async function fetchAllPatients(): Promise<{

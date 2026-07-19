@@ -1,26 +1,15 @@
 import { NextResponse } from "next/server";
 import { getAllPatients, createPatient } from "../../lib/db";
 import { logger } from "@/app/lib/logger";
+import { verifyClinicPin } from "@/app/lib/auth";
 import type { PatientRecord } from "../../types/clinical";
 
 export const runtime = "nodejs";
 
-// Simple PIN verification
-function verifyPin(request: Request): boolean {
-  const clinicPin = process.env.CLINIC_PIN;
-
-  // If no PIN is configured, allow access (for development)
-  if (!clinicPin) return true;
-
-  const providedPin = request.headers.get("X-Clinic-Pin");
-  return providedPin === clinicPin;
-}
-
 // GET /api/patients - List all patients
 export async function GET(request: Request) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const patients = await getAllPatients();
@@ -36,9 +25,8 @@ export async function GET(request: Request) {
 
 // POST /api/patients - Create a new patient
 export async function POST(request: Request) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const body = await request.json();

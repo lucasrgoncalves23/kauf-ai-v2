@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { logExport } from "../lib/audit";
+import { getPinHeaders } from "../lib/api-client";
 import { logger } from "../lib/logger";
 import type { ClinicalOutputs, ToastState } from "../types/clinical";
 
@@ -52,7 +53,7 @@ export function useExportHandlers({
     try {
       const res = await fetch("/api/generate-patient-pdf", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getPinHeaders() },
         body: JSON.stringify({
           analise: outputs.analise,
           conduta: outputs.conduta,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { logger } from "../lib/logger";
+import { getPinHeaders } from "../lib/api-client";
 import type {
   ChatMessage,
   ClinicalData,
@@ -40,7 +41,7 @@ export function useCopilotChat({
     try {
       const res = await fetch("/api/chat-assistant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getPinHeaders() },
         body: JSON.stringify({
           messages: [...chatMessages, newUserMsg],
           context: { inputs, outputs, engineStatus },

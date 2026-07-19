@@ -1,20 +1,10 @@
 import { NextResponse } from "next/server";
 import { getPatient, updatePatient, deletePatient } from "../../../lib/db";
 import { logger } from "@/app/lib/logger";
+import { verifyClinicPin } from "@/app/lib/auth";
 import type { PatientRecord } from "../../../types/clinical";
 
 export const runtime = "nodejs";
-
-// Simple PIN verification
-function verifyPin(request: Request): boolean {
-  const clinicPin = process.env.CLINIC_PIN;
-
-  // If no PIN is configured, allow access (for development)
-  if (!clinicPin) return true;
-
-  const providedPin = request.headers.get("X-Clinic-Pin");
-  return providedPin === clinicPin;
-}
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -22,9 +12,8 @@ type RouteParams = {
 
 // GET /api/patients/[id] - Get a single patient
 export async function GET(request: Request, { params }: RouteParams) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { id } = await params;
@@ -46,9 +35,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 
 // PUT /api/patients/[id] - Update a patient
 export async function PUT(request: Request, { params }: RouteParams) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { id } = await params;
@@ -76,9 +64,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
 // DELETE /api/patients/[id] - Delete a patient
 export async function DELETE(request: Request, { params }: RouteParams) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "Invalid PIN" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { id } = await params;

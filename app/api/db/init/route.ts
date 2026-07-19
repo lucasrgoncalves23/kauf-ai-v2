@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
 import { initDatabase, checkDatabaseConnection } from "../../../lib/db";
 import { logger } from "@/app/lib/logger";
+import { verifyClinicPin } from "@/app/lib/auth";
 
 export const runtime = "nodejs";
 
 // POST /api/db/init - Initialize database tables
 // This should be called once during setup
 export async function POST(request: Request) {
-  // Only allow in development or with admin key
+  // Fail closed: accept either the admin key or the clinic PIN
   const adminKey = process.env.ADMIN_KEY;
   const providedKey = request.headers.get("X-Admin-Key");
+  const adminOk = !!adminKey && providedKey === adminKey;
 
-  if (adminKey && providedKey !== adminKey) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!adminOk) {
+    const auth = verifyClinicPin(request);
+    if (!auth.ok) return auth.response;
   }
 
   try {

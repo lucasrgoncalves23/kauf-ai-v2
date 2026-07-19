@@ -138,16 +138,6 @@ export default function Home() {
     });
   }, [setPatients]);
 
-  const handleLoadConsulta = useCallback((consulta: Consulta) => {
-    setInputs(consulta.inputs);
-    setOutputs(consulta.outputs);
-    if (consulta.engineStatus) setEngineStatus(consulta.engineStatus);
-    setToast({
-      message: `Consulta de ${new Date(consulta.timestamp).toLocaleDateString("pt-BR")} carregada`,
-      type: "info",
-    });
-  }, [setInputs, setOutputs, setEngineStatus, setToast]);
-
   // Load all consultas on startup
   const [consultasLoaded, setConsultasLoaded] = useState(false);
   useEffect(() => {
@@ -199,6 +189,26 @@ export default function Home() {
     { patients, currentPatientId },
     { setPatients, setCurrentPatientId, setInputs, setOutputs, setPatientProfile, setChatMessages, setEngineStatus, setToast }
   );
+
+  const handleLoadConsulta = useCallback((consulta: Consulta) => {
+    // Always load a consulta into its own patient's chart — switching first
+    // prevents autosave from writing one patient's data into another's record
+    if (consulta.patientId !== currentPatientId) {
+      const target = patients[consulta.patientId];
+      if (!target || target.deletedAt) {
+        setToast({ message: "Paciente desta consulta não está ativo", type: "error" });
+        return;
+      }
+      handleSwitchPatient(consulta.patientId);
+    }
+    setInputs(consulta.inputs);
+    setOutputs(consulta.outputs);
+    if (consulta.engineStatus) setEngineStatus(consulta.engineStatus);
+    setToast({
+      message: `Consulta de ${new Date(consulta.timestamp).toLocaleDateString("pt-BR")} carregada`,
+      type: "info",
+    });
+  }, [currentPatientId, patients, handleSwitchPatient, setInputs, setOutputs, setEngineStatus, setToast]);
 
   const { chatInput, setChatInput, isChatLoading, handleSendMessage } = useCopilotChat({
     inputs, outputs, engineStatus, chatMessages,
@@ -322,14 +332,11 @@ export default function Home() {
                 onExportPatient={handleExportPatient}
                 onExportPrescription={handleExportPrescription}
                 onClearSession={() => {
-                  if (confirm("Limpar todos os dados da sessão?")) {
+                  // Start a fresh patient instead of blanking the current one —
+                  // blanking in place gets autosaved over the patient's record
+                  if (confirm("Limpar a tela e começar um novo paciente? O paciente atual permanece salvo.")) {
                     localStorage.removeItem("kai-session");
-                    setInputs({ anamnese: "", bioimpedancia: "", laboratoriais: "", genetica: "", wearable: "" });
-                    setOutputs({ analise: "", conduta: "", receita: "" });
-                    setPatientProfile({ name: "", age: "", sex: "", cpf: "", birthDate: "" });
-                    setChatMessages([]);
-                    setEngineStatus(null);
-                    setToast({ message: "Sessão limpa", type: "info" });
+                    handleCreateNewPatient();
                   }
                 }}
                 onOpenSettings={() => setShowSettings(true)}

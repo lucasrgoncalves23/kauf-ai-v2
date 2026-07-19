@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { processStream } from "../utils/stream";
 import { getCorrections } from "../lib/corrections";
+import { getPinHeaders } from "../lib/api-client";
 import { logGeneration } from "../lib/audit";
 import { logger } from "../lib/logger";
 import type { ClinicalData, ClinicalOutputs, EngineStatus, ToastState } from "../types/clinical";
@@ -69,7 +70,7 @@ export function useGenerationWorkflow({
 
       const response = await fetch("/api/generate-analise", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getPinHeaders() },
         body: JSON.stringify({ patient: inputs, corrections: approvedCorrections, phaseContext }),
         signal: analiseAbortRef.current.signal,
       });
@@ -139,7 +140,7 @@ export function useGenerationWorkflow({
 
       const response = await fetch("/api/generate-conduta", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getPinHeaders() },
         body: JSON.stringify({ patient: inputs, corrections: approvedCorrections, phaseContext }),
         signal: condutaAbortRef.current.signal,
       });
@@ -205,7 +206,7 @@ export function useGenerationWorkflow({
     try {
       const response = await fetch("/api/generate-prescription", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getPinHeaders() },
         body: JSON.stringify({
           conduta: outputs.conduta,
           patientName: patientName || "Paciente",

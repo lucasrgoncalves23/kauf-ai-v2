@@ -1,9 +1,13 @@
 import { buildCondutaPrompt, type Correction, type PhaseContext } from "@/app/lib/prompts";
 import { logger } from "@/app/lib/logger";
+import { verifyClinicPin } from "@/app/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const auth = verifyClinicPin(req);
+  if (!auth.ok) return auth.response;
+
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey || apiKey.trim().length < 10) {

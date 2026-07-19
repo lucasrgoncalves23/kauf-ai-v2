@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ClinicalData, ToastState } from "../types/clinical";
 import { logger } from "../lib/logger";
+import { getPinHeaders } from "../lib/api-client";
 
 // Vercel rejects request bodies over ~4.5MB, so large files are processed
 // client-side (PDF text extraction / page rendering) or compressed before upload.
@@ -44,7 +45,11 @@ export function useFileImport(
     const formData = new FormData();
     formData.append("file", blob, filename);
 
-    const res = await fetch("/api/import-pdf", { method: "POST", body: formData });
+    const res = await fetch("/api/import-pdf", {
+      method: "POST",
+      headers: getPinHeaders(),
+      body: formData,
+    });
 
     // Platform errors (413 body too large, 504 timeout) return HTML, not JSON
     let data: { text?: string; error?: string };

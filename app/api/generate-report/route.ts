@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ClinicalInput } from "@/app/types/clinical";
 import { runEngine } from "@/app/lib/engine";
+import { verifyClinicPin } from "@/app/lib/auth";
 
 type PatientSnapshot = {
   age?: string;
@@ -41,6 +42,9 @@ function buildClinicalInputFromPatient(p: PatientSnapshot): ClinicalInput {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = verifyClinicPin(req);
+  if (!auth.ok) return auth.response;
+
   const body = (await req.json()) as GenerateReportRequest;
 
   const input: ClinicalInput = isWrappedPatient(body)

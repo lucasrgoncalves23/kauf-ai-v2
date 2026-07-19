@@ -12,7 +12,7 @@ import type {
 } from "../types/clinical";
 import { DEFAULT_SETTINGS } from "../types/clinical";
 import { generatePatientId, createBlankPatient } from "../utils/patient";
-import { fetchAllPatients, savePatient } from "../lib/api-client";
+import { fetchAllPatients, savePatient, getPinHeaders } from "../lib/api-client";
 import { logger } from "../lib/logger";
 
 type SessionState = {
@@ -51,6 +51,8 @@ export function useSessionPersistence(
   const [isHydrated, setIsHydrated] = useState(false);
   const [usingDatabase, setUsingDatabase] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingSaveRef = useRef<PatientRecord | null>(null);
+  const patientsRef = useRef<Record<string, PatientRecord>>({});
 
   const {
     inputs,
@@ -220,8 +222,10 @@ export function useSessionPersistence(
     // Update local state immediately
     setPatients((prev) => ({ ...prev, [currentPatientId]: updatedPatient }));
 
-    // Debounce the actual save (500ms)
+    // Debounce the actual save (500ms); track pending so tab-close can flush it
+    pendingSaveRef.current = updatedPatient;
     saveTimeoutRef.current = setTimeout(() => {
+      pendingSaveRef.current = null;
       debouncedSave(updatedPatient);
     }, 500);
 
@@ -231,6 +235,52 @@ export function useSessionPersistence(
       }
     };
   }, [isHydrated, currentPatientId, inputs, outputs, patientProfile, chatMessages, engineStatus]);
+
+  // --- Flush pending save when the tab closes or is hidden ---
+  useEffect(() => {
+    patientsRef.current = patients;
+  }, [patients]);
+
+  useEffect(() => {
+    const flushPendingSave = () => {
+      const pending = pendingSaveRef.current;
+      if (!pending) return;
+      pendingSaveRef.current = null;
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+
+      // localStorage write is synchronous — survives unload
+      try {
+        const updatedPatients = { ...patientsRef.current, [pending.id]: pending };
+        localStorage.setItem("kai-patients", JSON.stringify(updatedPatients));
+        localStorage.setItem("kai-current-patient", pending.id);
+      } catch {
+        /* ignore */
+      }
+
+      // keepalive lets the request outlive the page (best-effort)
+      try {
+        fetch(`/api/patients/${pending.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...getPinHeaders() },
+          body: JSON.stringify(pending),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushPendingSave();
+    };
+
+    window.addEventListener("beforeunload", flushPendingSave);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", flushPendingSave);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
 
   // --- Save settings separately (localStorage only) ---
   useEffect(() => {

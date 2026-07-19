@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import pdf from "pdf-parse";
 import { logger } from "@/app/lib/logger";
+import { verifyClinicPin } from "@/app/lib/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
+  const auth = verifyClinicPin(req);
+  if (!auth.ok) return auth.response;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;

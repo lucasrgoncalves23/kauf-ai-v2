@@ -2,25 +2,18 @@ import { NextResponse } from "next/server";
 import { getConsultas, createConsulta, getPatient } from "../../../../lib/db";
 import { notifyCrmConsultaFinalizada } from "../../../../lib/crm";
 import { logger } from "@/app/lib/logger";
+import { verifyClinicPin } from "@/app/lib/auth";
 import type { Consulta } from "../../../../types/clinical";
 
 export const runtime = "nodejs";
-
-function verifyPin(request: Request): boolean {
-  const clinicPin = process.env.CLINIC_PIN;
-  if (!clinicPin) return true;
-  const providedPin = request.headers.get("X-Clinic-Pin");
-  return providedPin === clinicPin;
-}
 
 // GET /api/patients/[id]/consultas - List consultas for a patient
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "PIN invalido" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { id } = await params;
@@ -45,9 +38,8 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!verifyPin(request)) {
-    return NextResponse.json({ error: "PIN invalido" }, { status: 401 });
-  }
+  const auth = verifyClinicPin(request);
+  if (!auth.ok) return auth.response;
 
   try {
     const { id } = await params;

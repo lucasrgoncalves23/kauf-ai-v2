@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildRewritePrompt } from "@/app/lib/prompts";
+import { verifyClinicPin } from "@/app/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -24,6 +25,9 @@ function extractSection(text: string, tagName: string): string {
 // ---------- ROUTE ----------
 
 export async function POST(req: Request) {
+  const auth = verifyClinicPin(req);
+  if (!auth.ok) return auth.response;
+
   const requestId = `rw_${Date.now()}`;
 
   try {
