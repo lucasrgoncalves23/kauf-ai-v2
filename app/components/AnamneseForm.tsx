@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Spinner } from "./ui/Spinner";
+import { useDictation } from "../hooks/useDictation";
 
 // --- Section Definitions ---
 
@@ -356,6 +357,19 @@ export function AnamneseForm({
     emitChange(fields, checks, val);
   };
 
+  // Voice dictation appends to Observações (survives serialization)
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const {
+    isSupported: dictationSupported,
+    isRecording,
+    interim,
+    toggle: toggleDictation,
+  } = useDictation((text) => {
+    const current = notesRef.current.trim();
+    handleNotesChange(current ? `${current} ${text}` : text);
+  });
+
   const toggleSection = (num: number) => {
     setExpanded((prev) => ({ ...prev, [num]: !prev[num] }));
   };
@@ -414,6 +428,24 @@ export function AnamneseForm({
           >
             {allExpanded ? "Recolher" : "Expandir"}
           </button>
+          {dictationSupported && (
+            <button
+              onClick={toggleDictation}
+              title={isRecording ? "Parar ditado" : "Ditar (voz → Observações)"}
+              className={`flex items-center gap-1 font-medium transition-colors rounded ${
+                compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-1"
+              } ${
+                isRecording
+                  ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30"
+                  : "text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700"
+              }`}
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18v3m-4 0h8M12 15a4 4 0 004-4V6a4 4 0 10-8 0v5a4 4 0 004 4zM19 11a7 7 0 01-14 0" />
+              </svg>
+              {isRecording ? "Gravando..." : "Ditar"}
+            </button>
+          )}
           {onImport && (
             <>
               <input
@@ -439,6 +471,16 @@ export function AnamneseForm({
           )}
         </div>
       </div>
+
+      {/* Dictation live feedback */}
+      {isRecording && (
+        <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
+          <span className="text-[10px] text-red-700 dark:text-red-300 truncate">
+            {interim || "Ouvindo... fale para adicionar às Observações"}
+          </span>
+        </div>
+      )}
 
       {/* Sections */}
       <div className={compact ? "space-y-1" : "space-y-2"}>
