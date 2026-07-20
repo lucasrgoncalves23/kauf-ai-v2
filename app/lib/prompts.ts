@@ -262,8 +262,8 @@ Proteína: 2g/kg/dia distribuídos em 4 refeições
 
 MÓDULOS OBRIGATÓRIOS (todos devem estar presentes):
 1. SONO - Higiene e suplementos noturnos
-2. NUTRIÇÃO - Macros e dieta semanal. Ao final desta seção, inclua "EXEMPLO DE DIETA POR 1 SEMANA" com um plano alimentar dia a dia (segunda a domingo) personalizado ao paciente.
-3. EXERCÍCIO - Força, HIIT, mobilidade. Ao final desta seção, inclua "EXEMPLO DE TREINO POR 1 SEMANA" com um plano de treinos dia a dia (segunda a domingo) personalizado ao paciente.
+2. NUTRIÇÃO - Macros e dieta semanal. Ao final desta seção, inclua "EXEMPLO DE DIETA POR 30 DIAS" com um plano alimentar dia a dia personalizado ao paciente.
+3. EXERCÍCIO - Força, HIIT, mobilidade. Ao final desta seção, inclua "EXEMPLO DE TREINO POR 30 DIAS" com um plano de treinos dia a dia personalizado ao paciente.
 4. SUPLEMENTAÇÃO - Por eixos (Mitocondrial, Antioxidante, etc.)
 5. MANIPULADOS - Fórmulas com doses
 6. SOROTERAPIA - Protocolo 3 meses
