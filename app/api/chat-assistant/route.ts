@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   const stream = client.messages.stream(
     {
       model: MODEL,
-      max_tokens: 32000,
+      max_tokens: 128000,
       system: cachedSystem(rules, dynamicContext),
       messages,
     },

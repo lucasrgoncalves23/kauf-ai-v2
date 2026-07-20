@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const message = await client.messages.create(
       {
         model: MODEL,
-        max_tokens: 32000,
+        max_tokens: 128000,
         system: cachedSystem(system),
         messages: [{ role: "user", content: user }],
       },
