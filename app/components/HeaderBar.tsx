@@ -59,7 +59,7 @@ export function HeaderBar({
         {onToggleLeft && (
           <button
             onClick={onToggleLeft}
-            className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+            className="shrink-0 p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
             title={leftCollapsed ? "Mostrar painel do paciente" : "Ocultar painel do paciente"}
           >
             {leftCollapsed ? <PanelLeftOpen className="w-4.5 h-4.5" /> : <PanelLeftClose className="w-4.5 h-4.5" />}
@@ -69,25 +69,25 @@ export function HeaderBar({
         <img
           src="/ik-logo.png"
           alt="Instituto Kaufmann"
-          className="w-auto block dark:hidden h-20 compact:h-14"
+          className="w-auto shrink-0 block dark:hidden h-20 compact:h-14"
         />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/ik-logo-white.png"
           alt="Instituto Kaufmann"
-          className="w-auto hidden dark:block h-20 compact:h-14"
+          className="w-auto shrink-0 hidden dark:block h-20 compact:h-14"
         />
         {statusUi && (
           <div
-            className={`flex items-center gap-1.5 whitespace-nowrap text-2xs font-medium ${statusUi.textColor}`}
-            title="Status de sincronização com o servidor"
+            className={`flex items-center gap-1.5 min-w-0 text-2xs font-medium ${statusUi.textColor}`}
+            title={`${statusUi.text} — status de sincronização com o servidor`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusUi.dot}`}></span>
-            {statusUi.text}
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusUi.dot}`}></span>
+            <span className="truncate">{statusUi.text}</span>
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         {onSaveConsulta && (
           <button
             onClick={onSaveConsulta}
