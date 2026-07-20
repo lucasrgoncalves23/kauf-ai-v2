@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { buildChatSystemPrompt } from "@/app/lib/prompts";
 import { verifyClinicPin } from "@/app/lib/auth";
-import { getAnthropicClient, MODEL, cachedSystem } from "@/app/lib/anthropic";
+import { getAnthropicClient, MODEL, cachedSystem, streamToSSE } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,30 +15,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "API Key missing" }, { status: 500 });
   }
 
+  let messages, rules: string, dynamicContext: string | undefined;
   try {
     const body = await req.json();
-    const { messages, context } = body;
-
-    const { rules, context: dynamicContext } = buildChatSystemPrompt(context);
-
-    const message = await client.messages.create(
-      {
-        model: MODEL,
-        max_tokens: 8192,
-        system: cachedSystem(rules, dynamicContext),
-        messages: messages,
-      },
-      { signal: req.signal }
+    messages = body.messages;
+    ({ rules, context: dynamicContext } = buildChatSystemPrompt(body.context));
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Requisição inválida" },
+      { status: 400 }
     );
-
-    return NextResponse.json(message);
-  } catch (error: any) {
-    if (error instanceof Anthropic.APIError) {
-      return NextResponse.json(
-        { error: `IA indisponível (${error.status}): ${error.message}` },
-        { status: 502 }
-      );
-    }
-    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Streamed like the generation routes; API errors surface as SSE error events.
+  const stream = client.messages.stream(
+    {
+      model: MODEL,
+      max_tokens: 8192,
+      system: cachedSystem(rules, dynamicContext),
+      messages,
+    },
+    { signal: req.signal }
+  );
+
+  return streamToSSE(stream);
 }

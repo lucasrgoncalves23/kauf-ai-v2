@@ -249,7 +249,10 @@ export default function Home() {
     });
   }, [currentPatientId, patients, handleSwitchPatient, setInputs, setOutputs, setEngineStatus, setToast]);
 
-  const { chatInput, setChatInput, isChatLoading, handleSendMessage } = useCopilotChat({
+  const {
+    chatInput, setChatInput, isChatLoading, handleSendMessage,
+    streamingId, suggestions, undoableIds, handleRetry, handleUndoEdits,
+  } = useCopilotChat({
     inputs, outputs, engineStatus, chatMessages,
     setChatMessages, setOutputs, setToast,
   });
@@ -527,7 +530,7 @@ export default function Home() {
             {/* RIGHT: KAUAI ASSISTANT */}
             {!rightCollapsed && (
             <ErrorBoundary fallbackLabel="KAUAI Assistant">
-            <aside className="no-print h-full flex flex-col rounded-2xl compact:rounded-xl border border-indigo-100/60 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/40 backdrop-blur-xl shadow-xl shadow-indigo-200/30 dark:shadow-indigo-900/20 overflow-hidden transition-colors duration-300">
+            <aside className="no-print h-full flex flex-col rounded-2xl compact:rounded-xl border border-ai-100/60 dark:border-ai-900/60 bg-ai-50/60 dark:bg-ai-950/40 backdrop-blur-xl shadow-xl shadow-ai-200/30 dark:shadow-ai-900/20 overflow-hidden transition-colors duration-300">
               <div className="flex-shrink-0 max-h-[45%] overflow-y-auto border-b border-slate-100 dark:border-slate-700 bg-white/40 dark:bg-slate-800/40 shadow-sm z-10 p-5 compact:p-3">
                 <EnginePanel engineStatus={engineStatus} settings={settings} />
               </div>
@@ -537,6 +540,12 @@ export default function Home() {
                 onInputChange={setChatInput}
                 onSend={handleSendMessage}
                 isLoading={isChatLoading}
+                streamingId={streamingId}
+                suggestions={suggestions}
+                undoableIds={undoableIds}
+                onRetry={handleRetry}
+                onUndoEdits={handleUndoEdits}
+                onClearChat={() => setChatMessages([])}
                 onOpenFullscreen={() => setFullscreenPanel('copilot')}
               />
             </aside>
@@ -592,6 +601,12 @@ export default function Home() {
               onChatInputChange={setChatInput}
               onSendMessage={handleSendMessage}
               isChatLoading={isChatLoading}
+              chatStreamingId={streamingId}
+              chatSuggestions={suggestions}
+              chatUndoableIds={undoableIds}
+              onChatRetry={handleRetry}
+              onChatUndoEdits={handleUndoEdits}
+              onClearChat={() => setChatMessages([])}
             />
 
             <CorrectionsPanel

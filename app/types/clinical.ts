@@ -58,9 +58,30 @@ export type ClinicalOutputs = {
 
 // --- CHAT TYPES ---
 
+export type ChatEditAction = "edit" | "append" | "set";
+
+/** A document change KAUAI applied via a :::COMMAND::: block, kept for display in the chat. */
+export type ChatEdit = {
+  field: keyof ClinicalOutputs;
+  action: ChatEditAction;
+  /** Short excerpts (truncated) of what was replaced / inserted */
+  before?: string;
+  after?: string;
+};
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  /** Stable id; absent on messages persisted before it existed */
+  id?: string;
+  /** Document edits this reply applied */
+  edits?: ChatEdit[];
+  /** Commands that could not be applied (human-readable reasons) */
+  failures?: string[];
+  /** Set when the request failed; content may hold partial streamed text */
+  error?: string;
+  /** True after the doctor reverted this reply's edits */
+  undone?: boolean;
 };
 
 // --- ENGINE STATUS (UI) ---

@@ -25,6 +25,7 @@ export { GenerationButtons } from "./GenerationButtons";
 
 // Chat Components
 export { CopilotChat } from "./CopilotChat";
+export { ChatThread, ChatComposer } from "./ChatThread";
 
 // Output Components
 export { OutputPanel } from "./OutputPanel";

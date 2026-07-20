@@ -62,6 +62,72 @@ export function renderSimpleMarkdown(text: string): React.ReactNode {
 }
 
 /**
+ * Block-level renderer for chat replies: paragraphs, bullet lists (- • *),
+ * numbered lists and ###-style headings, with inline bold/italic.
+ * The container must NOT use whitespace-pre-wrap — line breaks are handled here.
+ */
+export function renderChatMarkdown(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  const blocks: React.ReactNode[] = [];
+  let key = 0;
+  let list: { ordered: boolean; start: number; items: string[] } | null = null;
+
+  const flushList = () => {
+    if (!list) return;
+    const { ordered, start, items } = list;
+    blocks.push(
+      React.createElement(
+        ordered ? "ol" : "ul",
+        {
+          key: key++,
+          start: ordered ? start : undefined,
+          className: `${ordered ? "list-decimal" : "list-disc"} pl-4 space-y-1 my-1`,
+        },
+        items.map((item) => React.createElement("li", { key: key++ }, renderSimpleMarkdown(item)))
+      )
+    );
+    list = null;
+  };
+
+  for (const line of lines) {
+    const bullet = line.match(/^\s*[-•*]\s+(.*)/);
+    const numbered = line.match(/^\s*(\d+)[.)]\s+(.*)/);
+    const heading = line.match(/^\s*#{1,4}\s+(.*)/);
+
+    if (bullet) {
+      if (!list || list.ordered) {
+        flushList();
+        list = { ordered: false, start: 1, items: [] };
+      }
+      list.items.push(bullet[1]);
+    } else if (numbered) {
+      if (!list || !list.ordered) {
+        flushList();
+        list = { ordered: true, start: parseInt(numbered[1], 10) || 1, items: [] };
+      }
+      list.items.push(numbered[2]);
+    } else if (heading) {
+      flushList();
+      blocks.push(
+        React.createElement(
+          "p",
+          { key: key++, className: "font-semibold mt-2 mb-1" },
+          renderSimpleMarkdown(heading[1])
+        )
+      );
+    } else if (line.trim() === "") {
+      flushList();
+      blocks.push(React.createElement("div", { key: key++, className: "h-2" }));
+    } else {
+      flushList();
+      blocks.push(React.createElement("p", { key: key++ }, renderSimpleMarkdown(line)));
+    }
+  }
+  flushList();
+  return blocks;
+}
+
+/**
  * Render text with line breaks preserved and markdown formatting
  */
 export function renderMarkdownWithLineBreaks(text: string): React.ReactNode {

@@ -1,8 +1,10 @@
 "use client";
 
-import { X, SendHorizontal, Lightbulb, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { X, Eraser, Lightbulb, Sparkles } from "lucide-react";
 import type { ClinicalOutputs, ChatMessage } from "../types/clinical";
-import { renderSimpleMarkdown } from "../utils/markdown";
+import { ChatThread, ChatComposer } from "./ChatThread";
+import { ConfirmDialog } from "./ui";
 
 type FullscreenEditorProps = {
   panel: "analise" | "conduta" | "receita" | "copilot" | null;
@@ -14,8 +16,14 @@ type FullscreenEditorProps = {
   chatMessages: ChatMessage[];
   chatInput: string;
   onChatInputChange: (value: string) => void;
-  onSendMessage: () => void;
+  onSendMessage: (text?: string) => void;
   isChatLoading: boolean;
+  chatStreamingId: string | null;
+  chatSuggestions: string[];
+  chatUndoableIds: string[];
+  onChatRetry: () => void;
+  onChatUndoEdits: (messageId: string) => void;
+  onClearChat: () => void;
 };
 
 export function FullscreenEditor({
@@ -29,7 +37,15 @@ export function FullscreenEditor({
   onChatInputChange,
   onSendMessage,
   isChatLoading,
+  chatStreamingId,
+  chatSuggestions,
+  chatUndoableIds,
+  onChatRetry,
+  onChatUndoEdits,
+  onClearChat,
 }: FullscreenEditorProps) {
+  const [confirmClear, setConfirmClear] = useState(false);
+
   if (!panel) return null;
 
   // Copilot fullscreen
@@ -42,74 +58,69 @@ export function FullscreenEditor({
         />
         <div className="no-print fixed inset-4 md:inset-8 lg:inset-12 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden animate-scale-in">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-indigo-50 dark:bg-indigo-900/20">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-ai-50 dark:bg-ai-900/20">
             <div className="flex items-center gap-3">
-              <Sparkles className="w-4 h-4 text-indigo-500" />
-              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+              <Sparkles className="w-4 h-4 text-ai-500" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-ai-700 dark:text-ai-300">
                 Copiloto KAUAI
               </span>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Fechar (Esc)"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {chatMessages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6">
-                <Sparkles className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-3" />
-                <p className="font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 text-xs">
-                  Copiloto KAUAI
-                </p>
-                <p className="text-slate-400 dark:text-slate-500 text-2xs italic">
-                  &quot;Por que o paciente está na Fase A?&quot;
-                </p>
-              </div>
-            )}
-            {chatMessages.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed font-medium shadow-sm whitespace-pre-wrap ${
-                    msg.role === "user"
-                      ? "bg-slate-800 dark:bg-slate-600 text-white rounded-tr-none"
-                      : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 rounded-tl-none"
-                  }`}
+            <div className="flex items-center gap-1">
+              {chatMessages.length > 0 && (
+                <button
+                  onClick={() => setConfirmClear(true)}
+                  className="p-2 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                  title="Limpar conversa"
                 >
-                  {msg.role === "assistant" ? renderSimpleMarkdown(msg.content) : msg.content}
-                </div>
-              </div>
-            ))}
-            {isChatLoading && (
-              <div className="text-2xs text-slate-400 dark:text-slate-500 animate-pulse ml-2 font-medium">
-                Pensando...
-              </div>
-            )}
-          </div>
-          {/* Input */}
-          <div className="border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-4">
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 shadow-sm focus-within:ring-2 focus-within:ring-indigo-100 dark:focus-within:ring-indigo-900 p-2">
-              <input
-                className="flex-1 bg-transparent outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-white px-3 py-2 text-sm"
-                placeholder="Pergunte ao KAUAI..."
-                value={chatInput}
-                onChange={(e) => onChatInputChange(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && onSendMessage()}
-                autoFocus
-              />
+                  <Eraser className="w-4 h-4" />
+                </button>
+              )}
               <button
-                onClick={onSendMessage}
-                disabled={isChatLoading}
-                aria-label="Enviar"
-                className="bg-indigo-600 rounded-lg text-white hover:bg-indigo-700 transition-all disabled:opacity-50 p-2.5"
+                onClick={onClose}
+                className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                title="Fechar (Esc)"
               >
-                <SendHorizontal className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
+
+          <ChatThread
+            messages={chatMessages}
+            isLoading={isChatLoading}
+            streamingId={chatStreamingId}
+            suggestions={chatSuggestions}
+            onSuggestion={(text) => onSendMessage(text)}
+            onRetry={onChatRetry}
+            onUndoEdits={onChatUndoEdits}
+            undoableIds={chatUndoableIds}
+            size="fullscreen"
+          />
+
+          {/* Input — floats below the thread fade */}
+          <div className="px-6 pb-5 pt-1">
+            <ChatComposer
+              value={chatInput}
+              onChange={onChatInputChange}
+              onSend={() => onSendMessage()}
+              isLoading={isChatLoading}
+              size="fullscreen"
+              autoFocus
+            />
+          </div>
+
+          <ConfirmDialog
+            open={confirmClear}
+            title="Limpar conversa?"
+            message="O histórico do chat deste paciente será apagado. As alterações já aplicadas nos documentos permanecem."
+            confirmLabel="Limpar"
+            danger
+            onConfirm={() => {
+              onClearChat();
+              setConfirmClear(false);
+            }}
+            onCancel={() => setConfirmClear(false)}
+          />
         </div>
       </>
     );
