@@ -3,6 +3,28 @@
 // serverless request body cap — only the (small) extracted text or
 // compressed page images are ever uploaded.
 
+// pdfjs-dist v6 iterates ReadableStream with for-await-of inside getTextContent(),
+// which requires ReadableStream[Symbol.asyncIterator] (Safari 18+, Chrome 124+).
+if (
+  typeof ReadableStream !== "undefined" &&
+  !(Symbol.asyncIterator in ReadableStream.prototype)
+) {
+  Object.defineProperty(ReadableStream.prototype, Symbol.asyncIterator, {
+    async *value() {
+      const reader = (this as ReadableStream).getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) return;
+          yield value;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
+}
+
 let pdfjsPromise: Promise<typeof import("pdfjs-dist")> | null = null;
 
 async function loadPdfjs() {
