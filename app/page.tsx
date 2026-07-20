@@ -35,6 +35,7 @@ import { TrashBanner } from "./components/TrashBanner";
 import { DataBox } from "./components/DataBox";
 import { MedicalReportPrint } from "./components/MedicalReportPrint";
 import { LabTrendsModal } from "./components/LabTrendsModal";
+import { ConsultaCompareModal } from "./components/ConsultaCompareModal";
 import {
   PinLogin,
   PatientSwitcher,
@@ -88,6 +89,7 @@ export default function Home() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   const [showLabTrends, setShowLabTrends] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
   const [fullscreenPanel, setFullscreenPanel] = useState<'analise' | 'conduta' | 'receita' | 'copilot' | null>(null);
   const [patients, setPatients] = useState<Record<string, PatientRecord>>({});
   const [currentPatientId, setCurrentPatientId] = useState<string | null>(null);
@@ -264,6 +266,7 @@ export default function Home() {
         setFullscreenPanel(null);
         setShowSettings(false);
         setShowLabTrends(false);
+        setShowCompare(false);
         setShowCorrectionsPanel(false);
         setShowPatientSwitcher(false);
         setShowExportDropdown(false);
@@ -356,6 +359,17 @@ export default function Home() {
                   </svg>
                   <span className={`font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${compact ? "text-[9px]" : "text-[10px]"}`}>
                     Evolução Laboratorial
+                  </span>
+                </button>
+                <button
+                  onClick={() => setShowCompare(true)}
+                  className={`no-print w-full flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:border-slate-200 dark:hover:border-slate-600 text-left transition-all ${compact ? "p-3" : "p-4"}`}
+                >
+                  <svg className="w-4 h-4 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 4v16M15 4v16M4 9h5m6 0h5M4 15h5m6 0h5" />
+                  </svg>
+                  <span className={`font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+                    Comparar Consultas
                   </span>
                 </button>
               </div>
@@ -485,6 +499,14 @@ export default function Home() {
               onClose={() => setShowLabTrends(false)}
               consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
               currentLabText={inputs.laboratoriais}
+              patientName={patientProfile.name}
+            />
+            <ConsultaCompareModal
+              isOpen={showCompare}
+              onClose={() => setShowCompare(false)}
+              consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+              currentInputs={inputs}
+              currentOutputs={outputs}
               patientName={patientProfile.name}
             />
             <SettingsDrawer
