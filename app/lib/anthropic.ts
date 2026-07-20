@@ -6,7 +6,7 @@ import { logger } from "./logger";
  * The SDK gives automatic retries on 429/5xx and typed errors.
  */
 
-export const MODEL = "claude-sonnet-5";
+export const MODEL = "claude-sonnet-4-6";
 
 export function getAnthropicClient(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;

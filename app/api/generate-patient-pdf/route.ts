@@ -4,7 +4,7 @@ import { verifyClinicPin } from "@/app/lib/auth";
 import { getAnthropicClient, MODEL, cachedSystem, messageText } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const auth = verifyClinicPin(req);
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const message = await client.messages.create(
       {
         model: MODEL,
-        max_tokens: 128000,
+        max_tokens: 4096,
         system: cachedSystem(system),
         messages: [{ role: "user", content: user }],
       },

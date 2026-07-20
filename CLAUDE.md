@@ -17,7 +17,7 @@
 | Framework   | Next.js 16.1 (App Router)                          |
 | UI          | React 19, TypeScript                               |
 | Styling     | Tailwind CSS v4, PostCSS                           |
-| AI          | `@anthropic-ai/sdk`, model `claude-sonnet-5`       |
+| AI          | `@anthropic-ai/sdk`, model `claude-sonnet-4-6`     |
 | Database    | Neon serverless Postgres (`@neondatabase/serverless`) |
 | PDF (server)| `pdf-parse` (text extraction, Vision fallback)     |
 | PDF (client)| `pdfjs-dist` (large-file text extraction + page OCR) |

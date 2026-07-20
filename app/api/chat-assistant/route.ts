@@ -4,7 +4,7 @@ import { verifyClinicPin } from "@/app/lib/auth";
 import { getAnthropicClient, MODEL, cachedSystem, streamToSSE } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const auth = verifyClinicPin(req);
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
   const stream = client.messages.stream(
     {
       model: MODEL,
-      max_tokens: 128000,
+      max_tokens: 8192,
       system: cachedSystem(rules, dynamicContext),
       messages,
     },
