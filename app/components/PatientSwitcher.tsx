@@ -1,7 +1,23 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import {
+  User,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Plus,
+  Folder,
+  FolderInput,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  Clock,
+  Undo2,
+  X,
+} from "lucide-react";
 import type { PatientRecord, Consulta } from "../types/clinical";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 type PatientSwitcherProps = {
   isOpen: boolean;
@@ -18,7 +34,6 @@ type PatientSwitcherProps = {
   onSaveRename: () => void;
   onCancelRename: () => void;
   onDelete: (id: string) => void;
-  compact?: boolean;
   consultas: Record<string, Consulta[]>;
   onLoadConsulta?: (consulta: Consulta) => void;
   onSetPatientFolder?: (patientId: string, folder: string | undefined) => void;
@@ -44,7 +59,6 @@ export function PatientSwitcher({
   onSaveRename,
   onCancelRename,
   onDelete,
-  compact = false,
   consultas,
   onLoadConsulta,
   onSetPatientFolder,
@@ -77,6 +91,7 @@ export function PatientSwitcher({
   const [editingFolderName, setEditingFolderName] = useState("");
   const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [confirmPermanentDelete, setConfirmPermanentDelete] = useState<PatientRecord | null>(null);
 
   // Get all unique folders from patients + defaults
   const allFolders = useMemo(() => {
@@ -185,66 +200,60 @@ export function PatientSwitcher({
   };
 
   return (
-    <div ref={containerRef} className={`relative z-50 ${compact ? "mb-3" : "mb-5"}`}>
+    <div ref={containerRef} className="relative z-50 mb-5 compact:mb-3">
       {/* Toggle button */}
       <button
         onClick={onToggle}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border transition-all ${
           isOpen
-            ? "bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800"
+            ? "bg-brand-50 dark:bg-brand-900/30 border-brand-200 dark:border-brand-800"
             : "bg-white/60 dark:bg-slate-700/60 border-slate-200 dark:border-slate-600 hover:bg-white dark:hover:bg-slate-700"
         }`}
       >
         <div className="flex items-center gap-2 min-w-0">
           <div
             className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-              isOpen ? "bg-blue-100 dark:bg-blue-800" : "bg-slate-100 dark:bg-slate-600"
+              isOpen ? "bg-brand-100 dark:bg-brand-800" : "bg-slate-100 dark:bg-slate-600"
             }`}
           >
-            <svg
-              className={`w-4 h-4 ${isOpen ? "text-blue-600 dark:text-blue-300" : "text-slate-500 dark:text-slate-400"}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
+            <User
+              className={`w-4 h-4 ${isOpen ? "text-brand-600 dark:text-brand-300" : "text-slate-500 dark:text-slate-400"}`}
+            />
           </div>
           <div className="text-left min-w-0">
-            <div className={`text-sm font-semibold truncate ${isOpen ? "text-blue-700 dark:text-blue-300" : "text-slate-700 dark:text-slate-200"}`}>
+            <div
+              className={`text-sm font-semibold truncate ${
+                isOpen ? "text-brand-700 dark:text-brand-300" : "text-slate-700 dark:text-slate-200"
+              }`}
+            >
               {(currentPatientId && patients[currentPatientId]?.name) || "Paciente"}
             </div>
-            <div className="text-[10px] text-slate-400 dark:text-slate-500">
+            <div className="text-2xs text-slate-400 dark:text-slate-500">
               {sortedPatients.length} paciente{sortedPatients.length !== 1 ? "s" : ""}
             </div>
           </div>
         </div>
-        <svg
-          className={`w-4 h-4 flex-shrink-0 transition-transform ${isOpen ? "rotate-180 text-blue-600 dark:text-blue-300" : "text-slate-400"}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown
+          className={`w-4 h-4 flex-shrink-0 transition-transform ${
+            isOpen ? "rotate-180 text-brand-600 dark:text-brand-300" : "text-slate-400"
+          }`}
+        />
       </button>
 
       {/* Dropdown panel */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl z-50 overflow-hidden animate-scale-in">
           {/* Header: search + actions */}
           <div className="p-3 border-b border-slate-100 dark:border-slate-700 space-y-2">
             {/* Search bar */}
             <div className="relative">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Buscar paciente..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400"
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 outline-none focus:ring-1 focus:ring-brand-400 placeholder:text-slate-400"
                 autoFocus
               />
             </div>
@@ -253,33 +262,31 @@ export function PatientSwitcher({
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setViewMode("folders")}
-                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors ${
+                  className={`text-2xs font-semibold px-2 py-1 rounded-md transition-colors ${
                     viewMode === "folders"
-                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+                      ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300"
                       : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
                 >
-                  PASTAS
+                  Pastas
                 </button>
                 <button
                   onClick={() => setViewMode("alpha")}
-                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors ${
+                  className={`text-2xs font-semibold px-2 py-1 rounded-md transition-colors ${
                     viewMode === "alpha"
-                      ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+                      ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300"
                       : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
                 >
-                  A-Z
+                  A–Z
                 </button>
               </div>
               <button
                 onClick={onCreateNew}
-                className="w-7 h-7 flex items-center justify-center rounded-md text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-md text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors"
                 title="Novo paciente"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
+                <Plus className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -310,17 +317,12 @@ export function PatientSwitcher({
                           onClick={() => toggleFolder(folder)}
                           className="flex-1 flex items-center gap-2 px-3 py-2 text-left"
                         >
-                          <svg
-                            className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${isExpanded ? "rotate-90" : ""}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          <svg className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M10 4H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2h-8l-2-2z" />
-                          </svg>
+                          <ChevronRight
+                            className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${
+                              isExpanded ? "rotate-90" : ""
+                            }`}
+                          />
+                          <Folder className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 flex-shrink-0 fill-current" />
                           {isRenamingThis ? (
                             <form
                               onSubmit={(e) => { e.preventDefault(); handleSaveRenameFolder(); }}
@@ -334,15 +336,19 @@ export function PatientSwitcher({
                                 onBlur={handleSaveRenameFolder}
                                 onKeyDown={(e) => e.key === "Escape" && setEditingFolder(null)}
                                 autoFocus
-                                className="w-full text-[11px] font-semibold px-1.5 py-0.5 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 outline-none focus:ring-1 focus:ring-blue-400 dark:text-white"
+                                className="w-full text-2xs font-semibold px-1.5 py-0.5 rounded border border-brand-300 dark:border-brand-600 bg-white dark:bg-slate-700 outline-none focus:ring-1 focus:ring-brand-400 dark:text-white"
                               />
                             </form>
                           ) : (
-                            <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 flex-1">
+                            <span className="text-2xs font-semibold text-slate-600 dark:text-slate-300 flex-1">
                               {folder}
                             </span>
                           )}
-                          <span className={`text-[10px] font-medium ${isEmpty ? "text-slate-300 dark:text-slate-600" : "text-slate-400 dark:text-slate-500"}`}>
+                          <span
+                            className={`text-2xs font-medium ${
+                              isEmpty ? "text-slate-300 dark:text-slate-600" : "text-slate-400 dark:text-slate-500"
+                            }`}
+                          >
                             {folderPatients.length}
                           </span>
                         </button>
@@ -352,30 +358,24 @@ export function PatientSwitcher({
                             <button
                               onClick={(e) => { e.stopPropagation(); setFolderMenuOpen(folderMenuOpen === folder ? null : folder); }}
                               className="opacity-0 group-hover/folder:opacity-100 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-all"
-                              title="Opcoes da pasta"
+                              title="Opções da pasta"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                              </svg>
+                              <MoreVertical className="w-3.5 h-3.5" />
                             </button>
                             {folderMenuOpen === folder && (
-                              <div className="absolute right-0 top-full mt-1 w-32 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg z-50 py-1">
+                              <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg z-50 py-1 animate-scale-in">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleStartRenameFolder(folder); }}
                                   className="w-full text-left px-3 py-1.5 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
                                 >
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                  </svg>
+                                  <Pencil className="w-3 h-3" />
                                   Renomear
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder); }}
                                   className="w-full text-left px-3 py-1.5 text-xs text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-2"
                                 >
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
+                                  <Trash2 className="w-3 h-3" />
                                   Excluir pasta
                                 </button>
                               </div>
@@ -420,7 +420,7 @@ export function PatientSwitcher({
                   {showNewFolderInput ? (
                     <form
                       onSubmit={(e) => { e.preventDefault(); handleCreateFolder(); }}
-                      className="flex gap-1"
+                      className="flex gap-1 items-center"
                     >
                       <input
                         type="text"
@@ -429,19 +429,26 @@ export function PatientSwitcher({
                         onChange={(e) => setNewFolderName(e.target.value)}
                         onKeyDown={(e) => e.key === "Escape" && setShowNewFolderInput(false)}
                         autoFocus
-                        className="flex-1 text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 outline-none focus:ring-1 focus:ring-blue-400 dark:text-white"
+                        className="flex-1 text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 outline-none focus:ring-1 focus:ring-brand-400 dark:text-white"
                       />
-                      <button type="submit" className="text-[10px] font-bold text-blue-600 dark:text-blue-400 px-2">OK</button>
-                      <button type="button" onClick={() => setShowNewFolderInput(false)} className="text-[10px] text-slate-400 px-1">✕</button>
+                      <button type="submit" className="text-2xs font-semibold text-brand-600 dark:text-brand-400 px-2">
+                        OK
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewFolderInput(false)}
+                        className="p-1 text-slate-400 hover:text-slate-600"
+                        aria-label="Cancelar"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
                     </form>
                   ) : (
                     <button
                       onClick={() => setShowNewFolderInput(true)}
-                      className="text-[10px] font-medium text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 flex items-center gap-1 transition-colors"
+                      className="text-2xs font-medium text-slate-400 hover:text-brand-500 dark:hover:text-brand-400 flex items-center gap-1 transition-colors"
                     >
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
+                      <Plus className="w-3 h-3" />
                       Nova pasta
                     </button>
                   )}
@@ -455,7 +462,7 @@ export function PatientSwitcher({
                 {Object.entries(byLetter).map(([letter, letterPatients]) => (
                   <div key={letter}>
                     <div className="px-3 py-1.5 bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700/30 sticky top-0">
-                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">{letter}</span>
+                      <span className="text-2xs font-bold text-slate-400 dark:text-slate-500">{letter}</span>
                     </div>
                     {letterPatients.map((patient) => (
                       <PatientRow
@@ -498,21 +505,14 @@ export function PatientSwitcher({
                 onClick={() => setShowTrash(!showTrash)}
                 className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
               >
-                <svg
+                <ChevronRight
                   className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${showTrash ? "rotate-90" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-                <svg className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex-1">
+                />
+                <Trash2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400 flex-1">
                   Lixeira
                 </span>
-                <span className="text-[10px] font-medium text-slate-400 dark:text-slate-500">
+                <span className="text-2xs font-medium text-slate-400 dark:text-slate-500">
                   {trashedPatients.length}
                 </span>
               </button>
@@ -534,7 +534,7 @@ export function PatientSwitcher({
                           <div className="text-sm font-medium text-slate-500 dark:text-slate-400 truncate">
                             {patient.name || "Sem nome"}
                           </div>
-                          <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                          <div className="text-2xs text-slate-400 dark:text-slate-500">
                             {deletedDate?.toLocaleDateString("pt-BR")}
                             {daysLeft > 0 && ` • ${daysLeft}d restantes`}
                             {daysLeft <= 0 && " • expira em breve"}
@@ -546,22 +546,14 @@ export function PatientSwitcher({
                             className="opacity-0 group-hover:opacity-100 p-1 text-emerald-500 hover:text-emerald-600 dark:text-emerald-400 dark:hover:text-emerald-300 transition-all"
                             title="Restaurar"
                           >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                            </svg>
+                            <Undo2 className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm(`Excluir ${patient.name || "este paciente"} permanentemente?`)) {
-                                onPermanentDelete?.(patient.id);
-                              }
-                            }}
+                            onClick={() => setConfirmPermanentDelete(patient)}
                             className="opacity-0 group-hover:opacity-100 p-1 text-red-400 hover:text-red-500 dark:text-red-500 dark:hover:text-red-400 transition-all"
                             title="Excluir permanentemente"
                           >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
@@ -573,6 +565,19 @@ export function PatientSwitcher({
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmPermanentDelete}
+        danger
+        title="Excluir permanentemente?"
+        message={`${confirmPermanentDelete?.name || "Este paciente"} e todas as suas consultas serão excluídos definitivamente. Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        onConfirm={() => {
+          if (confirmPermanentDelete) onPermanentDelete?.(confirmPermanentDelete.id);
+          setConfirmPermanentDelete(null);
+        }}
+        onCancel={() => setConfirmPermanentDelete(null)}
+      />
     </div>
   );
 }
@@ -631,7 +636,7 @@ function PatientRow({
           indented ? "pl-9 pr-3" : "px-3"
         } ${
           isCurrent
-            ? "bg-blue-50 dark:bg-blue-900/30"
+            ? "bg-brand-50 dark:bg-brand-900/30"
             : "hover:bg-slate-50 dark:hover:bg-slate-700/50"
         }`}
         onClick={() => !isEditing && onSwitch(patient.id)}
@@ -646,16 +651,20 @@ function PatientRow({
                 onBlur={onSaveRename}
                 onKeyDown={(e) => e.key === "Escape" && onCancelRename()}
                 autoFocus
-                className="flex-1 text-sm px-2 py-0.5 rounded border border-blue-300 dark:border-blue-600 bg-white dark:bg-slate-700 outline-none focus:ring-1 focus:ring-blue-400 dark:text-white"
+                className="flex-1 text-sm px-2 py-0.5 rounded border border-brand-300 dark:border-brand-600 bg-white dark:bg-slate-700 outline-none focus:ring-1 focus:ring-brand-400 dark:text-white"
                 onClick={(e) => e.stopPropagation()}
               />
             </form>
           ) : (
             <>
-              <div className={`text-sm font-medium truncate ${isCurrent ? "text-blue-700 dark:text-blue-300" : "text-slate-700 dark:text-slate-300"}`}>
+              <div
+                className={`text-sm font-medium truncate ${
+                  isCurrent ? "text-brand-700 dark:text-brand-300" : "text-slate-700 dark:text-slate-300"
+                }`}
+              >
                 {patient.name || "Sem nome"}
               </div>
-              <div className="text-[10px] text-slate-400 dark:text-slate-500">
+              <div className="text-2xs text-slate-400 dark:text-slate-500">
                 {new Date(patient.updatedAt).toLocaleDateString("pt-BR")}
                 {patient.profile?.age && ` • ${patient.profile.age} anos`}
                 {patientConsultas.length > 0 && (
@@ -669,7 +678,7 @@ function PatientRow({
         </div>
         {!isEditing && (
           <div className="flex items-center gap-0.5 ml-2 relative">
-            {isCurrent && <span className="text-blue-600 dark:text-blue-400 text-xs">●</span>}
+            {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-brand-600 dark:bg-brand-400" />}
             <button
               onClick={(e) => { e.stopPropagation(); onToggleConsultas(); }}
               className={`p-1 transition-all ${
@@ -679,11 +688,13 @@ function PatientRow({
                     ? "text-emerald-400 dark:text-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-300"
                     : "text-slate-300 dark:text-slate-600"
               }`}
-              title={patientConsultas.length > 0 ? `${patientConsultas.length} consulta${patientConsultas.length !== 1 ? "s" : ""}` : "Sem consultas"}
+              title={
+                patientConsultas.length > 0
+                  ? `${patientConsultas.length} consulta${patientConsultas.length !== 1 ? "s" : ""}`
+                  : "Sem consultas"
+              }
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <Clock className="w-3.5 h-3.5" />
             </button>
             {/* Folder assign button */}
             <button
@@ -691,18 +702,14 @@ function PatientRow({
               className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 transition-all"
               title="Mover para pasta"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
+              <FolderInput className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onStartRename(patient.id); }}
-              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-all"
+              className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-brand-500 dark:hover:text-brand-400 transition-all"
               title="Renomear"
             >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
+              <Pencil className="w-3.5 h-3.5" />
             </button>
             {canDelete && (
               <button
@@ -710,24 +717,26 @@ function PatientRow({
                 className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-all"
                 title="Excluir"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             )}
             {/* Folder assignment dropdown */}
             {folderMenuOpen && (
               <div
-                className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg z-50 py-1"
+                className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-lg z-50 py-1 animate-scale-in"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="px-2 py-1 text-[9px] uppercase text-slate-400 font-bold tracking-wider">Mover para</div>
+                <div className="px-2 py-1 text-2xs uppercase text-slate-400 font-semibold tracking-wider">
+                  Mover para
+                </div>
                 {allFolders.map((f) => (
                   <button
                     key={f}
                     onClick={() => onSetFolder(f)}
                     className={`w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${
-                      patient.folder === f ? "text-blue-600 dark:text-blue-400 font-medium" : "text-slate-600 dark:text-slate-300"
+                      patient.folder === f
+                        ? "text-brand-600 dark:text-brand-400 font-medium"
+                        : "text-slate-600 dark:text-slate-300"
                     }`}
                   >
                     {f} {patient.folder === f && "●"}
@@ -749,14 +758,18 @@ function PatientRow({
 
       {/* Consulta history */}
       {isConsultaExpanded && (
-        <div className={`bg-slate-50/80 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700/50 ${indented ? "pl-9" : ""}`}>
+        <div
+          className={`bg-slate-50/80 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-700/50 ${
+            indented ? "pl-9" : ""
+          }`}
+        >
           <div className="px-3 py-1.5">
-            <span className="text-[9px] uppercase text-slate-400 dark:text-slate-500 font-bold tracking-wider">
-              Historico de Consultas
+            <span className="text-2xs uppercase text-slate-400 dark:text-slate-500 font-semibold tracking-wider">
+              Histórico de Consultas
             </span>
           </div>
           {patientConsultas.length === 0 && (
-            <div className="px-4 py-3 text-[10px] text-slate-400 dark:text-slate-500 italic">
+            <div className="px-4 py-3 text-2xs text-slate-400 dark:text-slate-500 italic">
               Nenhuma consulta salva ainda.
             </div>
           )}
@@ -771,21 +784,22 @@ function PatientRow({
               >
                 <div className="flex items-center justify-between">
                   <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                    {date.toLocaleDateString("pt-BR")} {date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    {date.toLocaleDateString("pt-BR")}{" "}
+                    {date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </div>
                   {hasOutputs && (
                     <div className="flex gap-1">
-                      {consulta.outputs.analise && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Analise" />}
+                      {consulta.outputs.analise && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Análise" />}
                       {consulta.outputs.conduta && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" title="Conduta" />}
                       {consulta.outputs.receita && <span className="w-1.5 h-1.5 rounded-full bg-rose-400" title="Receita" />}
                     </div>
                   )}
                 </div>
                 {consulta.notes && (
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">{consulta.notes}</div>
+                  <div className="text-2xs text-slate-400 dark:text-slate-500 truncate mt-0.5">{consulta.notes}</div>
                 )}
                 {!consulta.notes && consulta.engineStatus && (
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                  <div className="text-2xs text-slate-400 dark:text-slate-500 mt-0.5">
                     Fase {consulta.engineStatus.phase} • {consulta.engineStatus.priority}
                   </div>
                 )}

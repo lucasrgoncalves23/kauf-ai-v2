@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Paperclip, Pencil, Check } from "lucide-react";
 import { Spinner } from "./ui/Spinner";
-import { renderMarkdownWithLineBreaks } from "../utils/markdown";
+import { OutputRenderer } from "./OutputRenderer";
 
 export type DataBoxProps = {
   title: string;
@@ -12,10 +13,10 @@ export type DataBoxProps = {
   onBlur?: () => void;
   isOutput?: boolean;
   isLoading?: boolean;
+  isStreaming?: boolean;
   placeholder?: string;
   minHeight?: string;
   titleColor?: string;
-  compact?: boolean;
 };
 
 export function DataBox({
@@ -26,10 +27,10 @@ export function DataBox({
   onBlur,
   isOutput = false,
   isLoading = false,
+  isStreaming = false,
   placeholder,
   minHeight = "min-h-[100px]",
   titleColor,
-  compact = false,
 }: DataBoxProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -42,7 +43,7 @@ export function DataBox({
   };
 
   const handleStartEditing = () => {
-    if (isOutput) {
+    if (isOutput && !isStreaming) {
       setIsEditing(true);
       setTimeout(() => textareaRef.current?.focus(), 0);
     }
@@ -53,10 +54,12 @@ export function DataBox({
     onBlur?.();
   };
 
+  // Streaming always shows the rendered view; edit mode is unavailable until done
+  const showReadView = isOutput && (isStreaming || !isEditing);
+
   return (
     <div
-      className={`flex flex-col rounded-xl transition-all duration-300 group
-      ${compact ? "gap-1 p-3" : "gap-2 p-5"}
+      className={`flex flex-col rounded-xl transition-all duration-300 group gap-2 p-5 compact:gap-1 compact:p-3
       ${
         isOutput
           ? "bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60"
@@ -66,7 +69,7 @@ export function DataBox({
     >
       <div className="flex items-center justify-between">
         <span
-          className={`font-bold uppercase tracking-wider ${compact ? "text-[9px]" : "text-[10px]"} ${
+          className={`font-semibold uppercase tracking-wider text-2xs ${
             titleColor ||
             (isOutput
               ? "text-emerald-600 dark:text-emerald-400"
@@ -75,54 +78,71 @@ export function DataBox({
         >
           {title}
         </span>
-        {!isOutput && onImport && (
-          <div className="no-print">
-            <input
-              type="file"
-              multiple
-              accept="application/pdf, image/jpeg, image/png, text/csv, .csv"
-              className="hidden"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-            />
+        <div className="no-print flex items-center gap-1.5">
+          {isOutput && isStreaming && (
+            <span className="flex items-center gap-1.5 text-2xs font-medium text-brand-600 dark:text-brand-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+              Gerando…
+            </span>
+          )}
+          {isOutput && !isStreaming && value.trim() && (
             <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className={`flex items-center gap-1 font-medium text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded hover:bg-slate-50 dark:hover:bg-slate-700 ${
-                compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-1"
-              }`}
+              onClick={isEditing ? handleBlur : handleStartEditing}
+              className="flex items-center gap-1 text-2xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              title={isEditing ? "Concluir edição" : "Editar texto"}
             >
-              {isLoading ? <Spinner /> : "📎 Import"}
+              {isEditing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3 h-3" />}
+              {isEditing ? "Concluir" : "Editar"}
             </button>
-          </div>
-        )}
+          )}
+          {!isOutput && onImport && (
+            <>
+              <input
+                type="file"
+                multiple
+                accept="application/pdf, image/jpeg, image/png, text/csv, .csv"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                className="flex items-center gap-1 text-2xs font-medium text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 px-2 py-1 compact:px-1.5 compact:py-0.5"
+              >
+                {isLoading ? <Spinner /> : <Paperclip className="w-3 h-3" />}
+                Importar
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {isOutput && !isEditing ? (
+      {showReadView ? (
         <div
           onClick={handleStartEditing}
-          className={`w-full leading-relaxed cursor-text ${
-            compact ? "text-[11px] min-h-[70px]" : `text-[13px] ${minHeight}`
-          } text-slate-700 dark:text-slate-300 font-medium`}
+          className={`w-full leading-relaxed text-sm compact:text-xs compact:min-h-[70px] ${minHeight} text-slate-700 dark:text-slate-300 ${
+            isStreaming ? "" : "cursor-text"
+          }`}
         >
           {value ? (
-            renderMarkdownWithLineBreaks(value)
+            <OutputRenderer text={value} streaming={isStreaming} />
           ) : (
             <span className="text-slate-300 dark:text-slate-600">
-              {placeholder || "Click to edit..."}
+              {placeholder || "Clique para editar..."}
             </span>
           )}
         </div>
       ) : (
         <textarea
           ref={textareaRef}
-          className={`w-full resize-none bg-transparent leading-relaxed outline-none placeholder:text-slate-200 dark:placeholder:text-slate-600 ${
-            compact ? "text-[11px] min-h-[70px]" : `text-[13px] ${minHeight}`
-          } ${isOutput ? "text-slate-700 dark:text-slate-300 font-medium" : "text-slate-600 dark:text-slate-300"}`}
+          className={`w-full resize-none bg-transparent leading-relaxed outline-none placeholder:text-slate-300 dark:placeholder:text-slate-600 text-sm compact:text-xs compact:min-h-[70px] ${minHeight} ${
+            isOutput ? "text-slate-700 dark:text-slate-300" : "text-slate-600 dark:text-slate-300"
+          }`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={isOutput ? handleBlur : onBlur}
-          placeholder={placeholder || "Paste or type here..."}
+          placeholder={placeholder || "Cole ou digite aqui..."}
         />
       )}
     </div>

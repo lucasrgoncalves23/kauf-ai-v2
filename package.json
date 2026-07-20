@@ -13,6 +13,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@neondatabase/serverless": "^1.0.2",
+    "lucide-react": "^1.25.0",
     "next": "16.1.1",
     "pdf-parse": "^1.1.4",
     "pdfjs-dist": "^6.1.200",

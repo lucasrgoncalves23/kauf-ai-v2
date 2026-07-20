@@ -3,7 +3,42 @@
 /* Enable class-based dark mode for Tailwind v4 */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* KAI ANIMATIONS */
+/* Density: `compact:` utilities apply when the app root carries data-density="compact" */
+@custom-variant compact (&:where([data-density="compact"], [data-density="compact"] *));
+
+/* ====== Design tokens ====== */
+@theme {
+  /* Brand — Instituto Kaufmann blue (anchored on the existing accent #2a78d6) */
+  --color-brand-50: #eff6fe;
+  --color-brand-100: #dcebfc;
+  --color-brand-200: #c0dcfa;
+  --color-brand-300: #94c5f6;
+  --color-brand-400: #61a5ef;
+  --color-brand-500: #3987e5;
+  --color-brand-600: #2a78d6;
+  --color-brand-700: #1f5fb3;
+  --color-brand-800: #1e4e8f;
+  --color-brand-900: #1e4272;
+  --color-brand-950: #162a46;
+
+  /* Smallest legible label size — replaces the old 9-10px micro-labels */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-2xs--line-height: 1rem;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* ====== Base ====== */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+  }
+}
+
+/* ====== Animations ====== */
 @keyframes slideUpFade {
   from {
     opacity: 0;
@@ -34,32 +69,51 @@
   animation: slide-in 0.3s ease-out;
 }
 
-/* THEME SETTINGS */
-:root {
-  --foreground: #171717;
-  /* Removed white background variable to let blobs show */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-@theme inline {
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
 }
 
-body {
-  /* This was blocking the blobs before: */
-  /* background: var(--background); */
-  
-  /* This allows the blobs to shine through: */
-  background: transparent; 
-  
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-/* Premium Scrollbar */
+.animate-scale-in {
+  animation: scale-in 0.15s ease-out;
+}
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.animate-caret {
+  animation: caret-blink 1s step-end infinite;
+}
+
+/* ====== Scrollbars ====== */
 .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 .scrollbar-default::-webkit-scrollbar {
   width: 6px;
@@ -70,6 +124,9 @@ body {
 .scrollbar-default::-webkit-scrollbar-thumb {
   background-color: #cbd5e1;
   border-radius: 20px;
+}
+.dark .scrollbar-default::-webkit-scrollbar-thumb {
+  background-color: #475569;
 }
 
 /* ====== PDF / Print Export ====== */

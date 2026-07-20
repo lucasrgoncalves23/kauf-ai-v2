@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { ChevronRight, Mic, Paperclip } from "lucide-react";
 import { Spinner } from "./ui/Spinner";
 import { useDictation } from "../hooks/useDictation";
 
@@ -296,7 +297,6 @@ export type AnamneseFormProps = {
   onChange: (v: string) => void;
   onImport?: (files: File[]) => void;
   isLoading?: boolean;
-  compact?: boolean;
 };
 
 export function AnamneseForm({
@@ -304,7 +304,6 @@ export function AnamneseForm({
   onChange,
   onImport,
   isLoading,
-  compact = false,
 }: AnamneseFormProps) {
   const [fields, setFields] = useState<Record<string, string>>(() =>
     parseFields(value)
@@ -400,31 +399,22 @@ export function AnamneseForm({
     ];
   };
 
-  const inputClass = `w-full bg-white/50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 font-medium outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition-all dark:text-white ${
-    compact ? "px-2 py-1 text-xs" : "px-2.5 py-1.5 text-sm"
-  }`;
+  const inputClass =
+    "w-full bg-white/50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 font-medium outline-none focus:ring-2 focus:ring-brand-100 dark:focus:ring-brand-900 focus:border-brand-300 dark:focus:border-brand-700 transition-all dark:text-white px-2.5 py-1.5 text-sm compact:px-2 compact:py-1 compact:text-xs";
 
   return (
     <div
-      className={`flex flex-col rounded-xl transition-all duration-300 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] dark:shadow-none hover:border-slate-200 dark:hover:border-slate-600 ${
-        compact ? "gap-1 p-3" : "gap-2 p-5"
-      }`}
+      className="flex flex-col rounded-xl transition-all duration-300 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)] dark:shadow-none hover:border-slate-200 dark:hover:border-slate-600 gap-2 p-5 compact:gap-1 compact:p-3"
     >
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span
-          className={`font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 ${
-            compact ? "text-[9px]" : "text-[10px]"
-          }`}
-        >
+        <span className="font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 text-2xs">
           Anamnese Multicamadas
         </span>
         <div className="flex items-center gap-2 no-print">
           <button
             onClick={allExpanded ? collapseAll : expandAll}
-            className={`font-medium text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded hover:bg-slate-50 dark:hover:bg-slate-700 ${
-              compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-1"
-            }`}
+            className="font-medium text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 text-2xs px-2 py-1 compact:px-1.5 compact:py-0.5"
           >
             {allExpanded ? "Recolher" : "Expandir"}
           </button>
@@ -432,17 +422,13 @@ export function AnamneseForm({
             <button
               onClick={toggleDictation}
               title={isRecording ? "Parar ditado" : "Ditar (voz → Observações)"}
-              className={`flex items-center gap-1 font-medium transition-colors rounded ${
-                compact ? "text-[9px] px-1.5 py-0.5" : "text-[10px] px-2 py-1"
-              } ${
+              className={`flex items-center gap-1 font-medium transition-colors rounded-md text-2xs px-2 py-1 compact:px-1.5 compact:py-0.5 ${
                 isRecording
                   ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30"
-                  : "text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  : "text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-slate-50 dark:hover:bg-slate-700"
               }`}
             >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18v3m-4 0h8M12 15a4 4 0 004-4V6a4 4 0 10-8 0v5a4 4 0 004 4zM19 11a7 7 0 01-14 0" />
-              </svg>
+              <Mic className="w-3 h-3" />
               {isRecording ? "Gravando..." : "Ditar"}
             </button>
           )}
@@ -459,13 +445,10 @@ export function AnamneseForm({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isLoading}
-                className={`flex items-center gap-1 font-medium text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors rounded hover:bg-slate-50 dark:hover:bg-slate-700 ${
-                  compact
-                    ? "text-[9px] px-1.5 py-0.5"
-                    : "text-[10px] px-2 py-1"
-                }`}
+                className="flex items-center gap-1 font-medium text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors rounded-md hover:bg-slate-50 dark:hover:bg-slate-700 text-2xs px-2 py-1 compact:px-1.5 compact:py-0.5"
               >
-                {isLoading ? <Spinner /> : "Import"}
+                {isLoading ? <Spinner /> : <Paperclip className="w-3 h-3" />}
+                Importar
               </button>
             </>
           )}
@@ -476,14 +459,14 @@ export function AnamneseForm({
       {isRecording && (
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/40">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shrink-0"></span>
-          <span className="text-[10px] text-red-700 dark:text-red-300 truncate">
+          <span className="text-2xs text-red-700 dark:text-red-300 truncate">
             {interim || "Ouvindo... fale para adicionar às Observações"}
           </span>
         </div>
       )}
 
       {/* Sections */}
-      <div className={compact ? "space-y-1" : "space-y-2"}>
+      <div className="space-y-2 compact:space-y-1">
         {SECTIONS.map((section) => {
           const [filled, total] = getSectionCount(section);
           const isExpanded = !!expanded[section.num];
@@ -493,38 +476,16 @@ export function AnamneseForm({
               {/* Section Header */}
               <button
                 onClick={() => toggleSection(section.num)}
-                className={`flex items-center w-full rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${
-                  compact ? "py-1.5 px-2 gap-2" : "py-2 px-3 gap-3"
-                }`}
+                className="flex items-center w-full rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors py-2 px-3 gap-3 compact:py-1.5 compact:px-2 compact:gap-2"
               >
-                <svg
-                  className={`w-3 h-3 text-slate-400 transition-transform ${
-                    isExpanded ? "rotate-90" : ""
-                  }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-                <span
-                  className={`font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${
-                    compact ? "text-[9px]" : "text-[10px]"
-                  }`}
-                >
+                <ChevronRight
+                  className={`w-3 h-3 text-slate-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                />
+                <span className="font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 text-2xs">
                   C{section.num} – {section.title}
                 </span>
                 {filled > 0 && (
-                  <span
-                    className={`ml-auto rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold ${
-                      compact ? "text-[8px] px-1.5 py-0" : "text-[9px] px-2 py-0.5"
-                    }`}
-                  >
+                  <span className="ml-auto rounded-full bg-brand-50 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 font-bold text-2xs px-2 py-0.5 compact:px-1.5 compact:py-0">
                     {filled}/{total}
                   </span>
                 )}
@@ -532,26 +493,12 @@ export function AnamneseForm({
 
               {/* Section Content */}
               {isExpanded && (
-                <div
-                  className={`${
-                    compact ? "px-2 pb-2 pt-1" : "px-3 pb-3 pt-1"
-                  }`}
-                >
+                <div className="px-3 pb-3 pt-1 compact:px-2 compact:pb-2">
                   {section.type === "fields" ? (
-                    <div
-                      className={`grid grid-cols-2 ${
-                        compact ? "gap-x-3 gap-y-1.5" : "gap-x-4 gap-y-2"
-                      }`}
-                    >
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 compact:gap-x-3 compact:gap-y-1.5">
                       {section.fields.map((field) => (
                         <div key={field.key}>
-                          <label
-                            className={`block uppercase text-slate-400 dark:text-slate-500 font-bold ${
-                              compact
-                                ? "text-[8px] mb-0.5"
-                                : "text-[9px] mb-1"
-                            }`}
-                          >
+                          <label className="block uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold text-[10px] mb-1 compact:mb-0.5">
                             {field.label}
                           </label>
                           <input
@@ -567,11 +514,7 @@ export function AnamneseForm({
                       ))}
                     </div>
                   ) : (
-                    <div
-                      className={`grid grid-cols-2 ${
-                        compact ? "gap-x-3 gap-y-1" : "gap-x-4 gap-y-1.5"
-                      }`}
-                    >
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 compact:gap-x-3 compact:gap-y-1">
                       {section.options.map((option) => {
                         const checked = (checks[section.num] || []).includes(
                           option
@@ -579,9 +522,7 @@ export function AnamneseForm({
                         return (
                           <label
                             key={option}
-                            className={`flex items-center gap-2 cursor-pointer rounded-md hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${
-                              compact ? "py-0.5 px-1" : "py-1 px-1.5"
-                            }`}
+                            className="flex items-center gap-2 cursor-pointer rounded-md hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors py-1 px-1.5 compact:py-0.5 compact:px-1"
                           >
                             <input
                               type="checkbox"
@@ -589,12 +530,10 @@ export function AnamneseForm({
                               onChange={() =>
                                 handleCheckToggle(section.num, option)
                               }
-                              className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 dark:bg-slate-700"
+                              className="rounded border-slate-300 dark:border-slate-600 text-brand-600 focus:ring-brand-500 dark:bg-slate-700"
                             />
                             <span
-                              className={`text-slate-600 dark:text-slate-300 ${
-                                compact ? "text-[10px]" : "text-[11px]"
-                              } ${checked ? "font-medium" : ""}`}
+                              className={`text-slate-600 dark:text-slate-300 text-xs compact:text-2xs ${checked ? "font-medium" : ""}`}
                             >
                               {option}
                             </span>
@@ -611,26 +550,18 @@ export function AnamneseForm({
       </div>
 
       {/* Observações */}
-      <div className={compact ? "pt-1" : "pt-2"}>
+      <div className="pt-2 compact:pt-1">
         <button
           onClick={() =>
             setExpanded((prev) => ({ ...prev, notes: !prev[notes as never] }))
           }
           className="hidden"
         />
-        <label
-          className={`block uppercase text-slate-400 dark:text-slate-500 font-bold ${
-            compact ? "text-[8px] mb-0.5" : "text-[9px] mb-1"
-          }`}
-        >
+        <label className="block uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold text-[10px] mb-1 compact:mb-0.5">
           Observações / Dados Importados
         </label>
         <textarea
-          className={`w-full resize-none bg-white/50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 font-medium outline-none focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition-all dark:text-white ${
-            compact
-              ? "px-2 py-1 text-xs min-h-[50px]"
-              : "px-2.5 py-1.5 text-sm min-h-[70px]"
-          }`}
+          className="w-full resize-none bg-white/50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 font-medium outline-none focus:ring-2 focus:ring-brand-100 dark:focus:ring-brand-900 focus:border-brand-300 dark:focus:border-brand-700 transition-all dark:text-white px-2.5 py-1.5 text-sm min-h-[70px] compact:px-2 compact:py-1 compact:text-xs compact:min-h-[50px]"
           value={notes}
           onChange={(e) => handleNotesChange(e.target.value)}
           placeholder="Texto livre, dados de PDF importado..."

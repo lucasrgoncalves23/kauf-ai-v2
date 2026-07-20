@@ -76,7 +76,7 @@ export function PinLogin({ onSuccess }: PinLoginProps) {
               placeholder="Digite o PIN"
               value={pin}
               onChange={(e) => { setPin(e.target.value); setError(""); }}
-              className="w-full text-center text-lg tracking-[0.5em] px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent placeholder:text-slate-300 dark:placeholder:text-slate-600 placeholder:tracking-normal placeholder:text-sm transition-all"
+              className="w-full text-center text-lg tracking-[0.5em] px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent placeholder:text-slate-300 dark:placeholder:text-slate-600 placeholder:tracking-normal placeholder:text-sm transition-all"
               autoComplete="off"
             />
           </div>
@@ -90,7 +90,7 @@ export function PinLogin({ onSuccess }: PinLoginProps) {
           <button
             type="submit"
             disabled={loading || !pin.trim()}
-            className={`w-full py-3 rounded-xl text-sm font-bold transition-all ${
+            className={`w-full py-3 rounded-xl text-sm font-semibold transition-all ${
               loading || !pin.trim()
                 ? "bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed"
                 : "bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 shadow-lg shadow-slate-200 dark:shadow-slate-900/30"

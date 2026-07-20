@@ -1,5 +1,6 @@
 "use client";
 
+import { X, SendHorizontal, Lightbulb, Sparkles } from "lucide-react";
 import type { ClinicalOutputs, ChatMessage } from "../types/clinical";
 import { renderSimpleMarkdown } from "../utils/markdown";
 
@@ -36,15 +37,15 @@ export function FullscreenEditor({
     return (
       <>
         <div
-          className="no-print fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+          className="no-print fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-fade-in"
           onClick={onClose}
         />
-        <div className="no-print fixed inset-4 md:inset-8 lg:inset-12 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden">
+        <div className="no-print fixed inset-4 md:inset-8 lg:inset-12 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden animate-scale-in">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-indigo-50 dark:bg-indigo-900/20">
             <div className="flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-              <span className="text-sm font-bold uppercase tracking-widest text-indigo-700 dark:text-indigo-300">
+              <Sparkles className="w-4 h-4 text-indigo-500" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
                 Copiloto KAUAI
               </span>
             </div>
@@ -53,27 +54,26 @@ export function FullscreenEditor({
               className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title="Fechar (Esc)"
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-5 h-5" />
             </button>
           </div>
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {chatMessages.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-40 p-6">
-                <p className="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 text-xs">
+              <div className="h-full flex flex-col items-center justify-center text-center p-6">
+                <Sparkles className="w-6 h-6 text-slate-300 dark:text-slate-600 mb-3" />
+                <p className="font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2 text-xs">
                   Copiloto KAUAI
                 </p>
-                <p className="text-slate-400 dark:text-slate-500 text-[11px]">
-                  &quot;Por que o paciente ta na Fase A?&quot;
+                <p className="text-slate-400 dark:text-slate-500 text-2xs italic">
+                  &quot;Por que o paciente está na Fase A?&quot;
                 </p>
               </div>
             )}
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[80%] rounded-2xl p-4 text-[13px] leading-relaxed font-medium shadow-sm whitespace-pre-wrap ${
+                  className={`max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed font-medium shadow-sm whitespace-pre-wrap ${
                     msg.role === "user"
                       ? "bg-slate-800 dark:bg-slate-600 text-white rounded-tr-none"
                       : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 rounded-tl-none"
@@ -84,8 +84,8 @@ export function FullscreenEditor({
               </div>
             ))}
             {isChatLoading && (
-              <div className="text-[11px] text-slate-400 dark:text-slate-500 animate-pulse ml-2 font-medium">
-                Thinking...
+              <div className="text-2xs text-slate-400 dark:text-slate-500 animate-pulse ml-2 font-medium">
+                Pensando...
               </div>
             )}
           </div>
@@ -94,7 +94,7 @@ export function FullscreenEditor({
             <div className="flex items-center gap-3 bg-white dark:bg-slate-700 rounded-xl border border-slate-200 dark:border-slate-600 shadow-sm focus-within:ring-2 focus-within:ring-indigo-100 dark:focus-within:ring-indigo-900 p-2">
               <input
                 className="flex-1 bg-transparent outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 dark:text-white px-3 py-2 text-sm"
-                placeholder="Ask KAUAI anything..."
+                placeholder="Pergunte ao KAUAI..."
                 value={chatInput}
                 onChange={(e) => onChatInputChange(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && onSendMessage()}
@@ -103,16 +103,10 @@ export function FullscreenEditor({
               <button
                 onClick={onSendMessage}
                 disabled={isChatLoading}
+                aria-label="Enviar"
                 className="bg-indigo-600 rounded-lg text-white hover:bg-indigo-700 transition-all disabled:opacity-50 p-2.5"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                  />
-                </svg>
+                <SendHorizontal className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -149,26 +143,26 @@ export function FullscreenEditor({
   return (
     <>
       <div
-        className="no-print fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+        className="no-print fixed inset-0 bg-black/50 backdrop-blur-sm z-50 animate-fade-in"
         onClick={onClose}
       />
-      <div className="no-print fixed inset-4 md:inset-8 lg:inset-12 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden">
+      <div className="no-print fixed inset-4 md:inset-8 lg:inset-12 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden animate-scale-in">
         {/* Header */}
         <div
           className={`flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 ${config.bgClass}`}
         >
           <div className="flex items-center gap-3">
             <span className={`w-2 h-2 rounded-full ${config.dotClass}`}></span>
-            <span className={`text-sm font-bold uppercase tracking-widest ${config.textClass}`}>{config.title}</span>
+            <span className={`text-xs font-semibold uppercase tracking-wider ${config.textClass}`}>
+              {config.title}
+            </span>
           </div>
           <button
             onClick={onClose}
             className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             title="Fechar (Esc)"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="w-5 h-5" />
           </button>
         </div>
         {/* Editor */}
@@ -188,21 +182,14 @@ export function FullscreenEditor({
               className="px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 transition-colors flex items-center gap-1.5"
               title="Salvar esta correção como exemplo para treinar a IA"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                />
-              </svg>
-              Salvar como Exemplo
+              <Lightbulb className="w-4 h-4" />
+              Salvar como exemplo
             </button>
             <button
               onClick={onClose}
               className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors ${config.buttonClass}`}
             >
-              Salvar e Fechar
+              Salvar e fechar
             </button>
           </div>
         </div>

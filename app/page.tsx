@@ -30,7 +30,8 @@ import { DEFAULT_SETTINGS } from "./types/clinical";
 import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-client";
 
 // --- COMPONENT IMPORTS ---
-import { Toast } from "./components/ui";
+import { TrendingUp, Columns3 } from "lucide-react";
+import { Toast, ConfirmDialog } from "./components/ui";
 import { TrashBanner } from "./components/TrashBanner";
 import { DataBox } from "./components/DataBox";
 import { MedicalReportPrint } from "./components/MedicalReportPrint";
@@ -93,6 +94,40 @@ export default function Home() {
   const [fullscreenPanel, setFullscreenPanel] = useState<'analise' | 'conduta' | 'receita' | 'copilot' | null>(null);
   const [patients, setPatients] = useState<Record<string, PatientRecord>>({});
   const [currentPatientId, setCurrentPatientId] = useState<string | null>(null);
+
+  // --- LAYOUT STATE ---
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message?: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
+
+  // Restore sidebar state; on narrow screens default to collapsed panels
+  useEffect(() => {
+    const left = localStorage.getItem("kai-left-collapsed");
+    const right = localStorage.getItem("kai-right-collapsed");
+    const narrow = window.innerWidth < 1280;
+    setLeftCollapsed(left !== null ? left === "1" : narrow && window.innerWidth < 1100);
+    setRightCollapsed(right !== null ? right === "1" : narrow);
+  }, []);
+
+  const toggleLeft = useCallback(() => {
+    setLeftCollapsed((prev) => {
+      localStorage.setItem("kai-left-collapsed", prev ? "0" : "1");
+      return !prev;
+    });
+  }, []);
+
+  const toggleRight = useCallback(() => {
+    setRightCollapsed((prev) => {
+      localStorage.setItem("kai-right-collapsed", prev ? "0" : "1");
+      return !prev;
+    });
+  }, []);
 
   // --- CONSULTA STATE ---
   const [consultasMap, setConsultasMap] = useState<Record<string, Consulta[]>>({});
@@ -302,9 +337,20 @@ export default function Home() {
     return <PinLogin onSuccess={() => setAuthenticated(true)} />;
   }
 
+  const gridCols = [
+    !leftCollapsed && (compact ? "240px" : "280px"),
+    "minmax(0,1fr)",
+    !rightCollapsed && (compact ? "300px" : "360px"),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <>
-      <div className="min-h-screen text-slate-800 dark:text-slate-200 font-sans print:hidden overflow-hidden relative bg-white dark:bg-slate-900 transition-colors duration-300">
+      <div
+        data-density={compact ? "compact" : "comfortable"}
+        className="min-h-screen text-slate-800 dark:text-slate-200 font-sans print:hidden overflow-hidden relative bg-white dark:bg-slate-900 transition-colors duration-300"
+      >
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         {trashBanner && (
           <TrashBanner
@@ -313,13 +359,14 @@ export default function Home() {
           />
         )}
 
-        <div className={`relative mx-auto max-w-[1600px] h-screen flex flex-col ${compact ? 'p-3' : 'p-6'}`}>
-          <div className={`grid h-full ${compact ? 'grid-cols-[240px_1fr_300px] gap-4' : 'grid-cols-[280px_1fr_360px] gap-8'}`}>
+        <div className="relative mx-auto max-w-[1600px] h-screen flex flex-col p-6 compact:p-3">
+          <div className="grid h-full gap-8 compact:gap-4" style={{ gridTemplateColumns: gridCols }}>
 
             {/* LEFT: SNAPSHOT */}
+            {!leftCollapsed && (
             <ErrorBoundary fallbackLabel="Painel do Paciente">
-            <aside className="no-print h-full overflow-visible flex flex-col">
-              <div className={`rounded-2xl bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-xl border border-slate-200/40 dark:border-slate-700/40 shadow-sm flex-1 overflow-y-auto overflow-x-visible transition-colors duration-300 ${compact ? 'p-4' : 'p-6'}`}>
+            <aside className="no-print h-full min-h-0 overflow-visible flex flex-col">
+              <div className="rounded-2xl bg-slate-50/80 dark:bg-slate-800/80 backdrop-blur-xl border border-slate-200/40 dark:border-slate-700/40 shadow-sm flex-1 overflow-y-auto overflow-x-visible transition-colors duration-300 p-6 compact:p-4">
                 <PatientSwitcher
                   isOpen={showPatientSwitcher}
                   onToggle={() => setShowPatientSwitcher(!showPatientSwitcher)}
@@ -335,7 +382,6 @@ export default function Home() {
                   onSaveRename={handleSaveRename}
                   onCancelRename={handleCancelRename}
                   onDelete={handleDeletePatient}
-                  compact={compact}
                   consultas={consultasMap}
                   onLoadConsulta={handleLoadConsulta}
                   onSetPatientFolder={handleSetPatientFolder}
@@ -343,44 +389,39 @@ export default function Home() {
                   onRestorePatient={handleRestorePatient}
                   onPermanentDelete={handlePermanentDelete}
                 />
-                <PatientSnapshot profile={patientProfile} onProfileChange={setPatientProfile} compact={compact} />
-                <DataSourcesStatus inputs={inputs} compact={compact} />
+                <PatientSnapshot profile={patientProfile} onProfileChange={setPatientProfile} />
+                <DataSourcesStatus inputs={inputs} />
                 <ConsultaHistory
                   consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
                   onLoadConsulta={handleLoadConsulta}
-                  compact={compact}
                 />
                 <button
                   onClick={() => setShowLabTrends(true)}
-                  className={`no-print w-full flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:border-slate-200 dark:hover:border-slate-600 text-left transition-all ${compact ? "p-3" : "p-4"}`}
+                  className="no-print w-full flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:border-slate-200 dark:hover:border-slate-600 text-left transition-all p-4 compact:p-3"
                 >
-                  <svg className="w-4 h-4 text-[#2a78d6] dark:text-[#3987e5]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l5-5 4 4 7-8M21 8v5m0-5h-5" />
-                  </svg>
-                  <span className={`font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+                  <TrendingUp className="w-4 h-4 text-brand-600 dark:text-brand-400" />
+                  <span className="text-2xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Evolução Laboratorial
                   </span>
                 </button>
                 <button
                   onClick={() => setShowCompare(true)}
-                  className={`no-print w-full flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:border-slate-200 dark:hover:border-slate-600 text-left transition-all ${compact ? "p-3" : "p-4"}`}
+                  className="no-print w-full flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:border-slate-200 dark:hover:border-slate-600 text-left transition-all p-4 compact:p-3"
                 >
-                  <svg className="w-4 h-4 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 4v16M15 4v16M4 9h5m6 0h5M4 15h5m6 0h5" />
-                  </svg>
-                  <span className={`font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+                  <Columns3 className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
+                  <span className="text-2xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Comparar Consultas
                   </span>
                 </button>
               </div>
             </aside>
             </ErrorBoundary>
+            )}
 
             {/* CENTER: ENGINE */}
             <ErrorBoundary fallbackLabel="Painel Principal">
             <main className="flex flex-col h-full overflow-hidden no-scrollbar">
               <HeaderBar
-                compact={compact}
                 showExportDropdown={showExportDropdown}
                 onToggleExportDropdown={() => setShowExportDropdown(!showExportDropdown)}
                 isGeneratingPatientPdf={isGeneratingPatientPdf}
@@ -390,47 +431,55 @@ export default function Home() {
                 onClearSession={() => {
                   // Start a fresh patient instead of blanking the current one —
                   // blanking in place gets autosaved over the patient's record
-                  if (confirm("Limpar a tela e começar um novo paciente? O paciente atual permanece salvo.")) {
-                    localStorage.removeItem("kai-session");
-                    handleCreateNewPatient();
-                  }
+                  setConfirmDialog({
+                    title: "Limpar a tela?",
+                    message: "Um novo paciente será iniciado. O paciente atual permanece salvo.",
+                    confirmLabel: "Limpar",
+                    onConfirm: () => {
+                      localStorage.removeItem("kai-session");
+                      handleCreateNewPatient();
+                      setConfirmDialog(null);
+                    },
+                  });
                 }}
                 onOpenSettings={() => setShowSettings(true)}
                 onSaveConsulta={handleSaveConsulta}
                 isSavingConsulta={isSavingConsulta}
                 saveStatus={saveStatus}
+                leftCollapsed={leftCollapsed}
+                rightCollapsed={rightCollapsed}
+                onToggleLeft={toggleLeft}
+                onToggleRight={toggleRight}
               />
 
-              <div className={`flex-1 overflow-y-auto pr-2 ${compact ? 'space-y-4 pb-6' : 'space-y-8 pb-10'}`}>
+              <div className="flex-1 overflow-y-auto pr-2 space-y-8 pb-10 compact:space-y-4 compact:pb-6">
                 {/* Input boxes */}
                 <section className="no-print">
-                  <div className={`flex items-center gap-3 ${compact ? 'mb-2' : 'mb-4'}`}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                    <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500 tracking-widest">Inputs Clínicos</span>
+                  <div className="flex items-center gap-3 mb-4 compact:mb-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-brand-500"></span>
+                    <span className="text-2xs font-semibold uppercase text-slate-400 dark:text-slate-500 tracking-wider">Inputs Clínicos</span>
                   </div>
                   <AnamneseForm
                     value={inputs.anamnese}
                     onChange={(v) => setInputs((p) => ({ ...p, anamnese: v }))}
                     onImport={(f) => handleImport(f, "anamnese")}
                     isLoading={loadingImport === "anamnese"}
-                    compact={compact}
                   />
-                  <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-4'}`}>
+                  <div className="grid grid-cols-2 gap-4 compact:gap-2">
                     {(["bioimpedancia", "laboratoriais", "genetica", "wearable"] as const).map((key) => (
-                      <DataBox key={key} title={key} value={inputs[key]} onChange={(v) => setInputs(p => ({...p, [key]: v}))} onImport={(f) => handleImport(f, key)} isLoading={loadingImport === key} compact={compact} />
+                      <DataBox key={key} title={key} value={inputs[key]} onChange={(v) => setInputs(p => ({...p, [key]: v}))} onImport={(f) => handleImport(f, key)} isLoading={loadingImport === key} />
                     ))}
                   </div>
                 </section>
 
                 <GenerationButtons
-                  compact={compact}
                   isRunningAnalise={isRunningAnalise} canRunAnalise={canRunAnalise()} onRunAnalise={handleRunAnalise} onStopAnalise={handleStopAnalise}
                   isRunningConduta={isRunningConduta} canRunConduta={canRunConduta()} onRunConduta={handleRunConduta} onStopConduta={handleStopConduta}
                   isRunningReceita={isRunningReceita} canRunReceita={canRunReceita()} onRunReceita={handleRunReceita} onStopReceita={handleStopReceita}
                 />
 
                 {/* Output panels */}
-                <section className={`print-report animate-slide-up ${compact ? 'space-y-3' : 'space-y-6'}`}>
+                <section className="print-report animate-slide-up space-y-6 compact:space-y-3">
                   <OutputPanel
                     label="Análise Clínica Integrada"
                     color="emerald"
@@ -439,8 +488,8 @@ export default function Home() {
                     onChange={v => setOutputs(p => ({...p, analise: v}))}
                     onBlur={() => handleOutputBlur("analise")}
                     onFullscreen={() => setFullscreenPanel('analise')}
-                    compact={compact}
                     minHeight={compact ? "min-h-[350px]" : "min-h-[600px]"}
+                    isRunning={isRunningAnalise}
                     canRestore={!!previousOutputs.analise && previousOutputs.analise !== outputs.analise}
                     onRestore={() => handleRestoreOutput("analise")}
                   />
@@ -452,8 +501,8 @@ export default function Home() {
                     onChange={v => setOutputs(p => ({...p, conduta: v}))}
                     onBlur={() => handleOutputBlur("conduta")}
                     onFullscreen={() => setFullscreenPanel('conduta')}
-                    compact={compact}
                     minHeight={compact ? "min-h-[180px]" : "min-h-[300px]"}
+                    isRunning={isRunningConduta}
                     canRestore={!!previousOutputs.conduta && previousOutputs.conduta !== outputs.conduta}
                     onRestore={() => handleRestoreOutput("conduta")}
                   />
@@ -465,8 +514,8 @@ export default function Home() {
                     onChange={v => setOutputs(p => ({...p, receita: v}))}
                     onBlur={() => handleOutputBlur("receita")}
                     onFullscreen={() => setFullscreenPanel('receita')}
-                    compact={compact}
                     minHeight={compact ? "min-h-[180px]" : "min-h-[300px]"}
+                    isRunning={isRunningReceita}
                     canRestore={!!previousOutputs.receita && previousOutputs.receita !== outputs.receita}
                     onRestore={() => handleRestoreOutput("receita")}
                   />
@@ -476,9 +525,10 @@ export default function Home() {
             </ErrorBoundary>
 
             {/* RIGHT: KAUAI ASSISTANT */}
+            {!rightCollapsed && (
             <ErrorBoundary fallbackLabel="KAUAI Assistant">
-            <aside className={`no-print h-full flex flex-col rounded-2xl border border-indigo-100/60 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/40 backdrop-blur-xl shadow-xl shadow-indigo-200/30 dark:shadow-indigo-900/20 overflow-hidden transition-colors duration-300 ${compact ? 'rounded-xl' : ''}`}>
-              <div className={`border-b border-slate-100 dark:border-slate-700 bg-white/40 dark:bg-slate-800/40 shadow-sm z-10 ${compact ? 'p-3' : 'p-5'}`}>
+            <aside className="no-print h-full flex flex-col rounded-2xl compact:rounded-xl border border-indigo-100/60 dark:border-indigo-900/60 bg-indigo-50/60 dark:bg-indigo-950/40 backdrop-blur-xl shadow-xl shadow-indigo-200/30 dark:shadow-indigo-900/20 overflow-hidden transition-colors duration-300">
+              <div className="flex-shrink-0 max-h-[45%] overflow-y-auto border-b border-slate-100 dark:border-slate-700 bg-white/40 dark:bg-slate-800/40 shadow-sm z-10 p-5 compact:p-3">
                 <EnginePanel engineStatus={engineStatus} settings={settings} />
               </div>
               <CopilotChat
@@ -488,10 +538,10 @@ export default function Home() {
                 onSend={handleSendMessage}
                 isLoading={isChatLoading}
                 onOpenFullscreen={() => setFullscreenPanel('copilot')}
-                settings={settings}
               />
             </aside>
             </ErrorBoundary>
+            )}
 
             {/* MODALS & OVERLAYS */}
             <LabTrendsModal
@@ -550,7 +600,17 @@ export default function Home() {
               corrections={correctionsList}
               onApprove={(id) => { approveCorrection(id); refreshCorrectionsList(); }}
               onUnapprove={(id) => { unapproveCorrection(id); refreshCorrectionsList(); }}
-              onDelete={(id) => { if (confirm("Excluir esta correção?")) { deleteCorrection(id); refreshCorrectionsList(); } }}
+              onDelete={(id) => { deleteCorrection(id); refreshCorrectionsList(); }}
+            />
+
+            <ConfirmDialog
+              open={!!confirmDialog}
+              title={confirmDialog?.title ?? ""}
+              message={confirmDialog?.message}
+              confirmLabel={confirmDialog?.confirmLabel}
+              danger={confirmDialog?.danger}
+              onConfirm={() => confirmDialog?.onConfirm()}
+              onCancel={() => setConfirmDialog(null)}
             />
 
           </div>

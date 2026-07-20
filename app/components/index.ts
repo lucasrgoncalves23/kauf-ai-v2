@@ -1,5 +1,8 @@
 // UI Components
-export { Toast, Spinner, SectionLabel } from "./ui";
+export { Toast, Spinner, SectionLabel, ConfirmDialog } from "./ui";
+
+// Output rendering
+export { OutputRenderer } from "./OutputRenderer";
 
 // Data Components
 export { DataBox } from "./DataBox";
