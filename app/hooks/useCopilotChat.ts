@@ -89,6 +89,12 @@ export type AppliedCommands = {
  * Parse and apply every :::COMMAND::: block in `raw` against `outputs`
  * (the snapshot the model saw, so `find` excerpts match).
  */
+function sanitizeJsonNewlines(raw: string): string {
+  return raw.replace(/"(?:[^"\\]|\\.)*"/g, (match) =>
+    match.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
+  );
+}
+
 export function applyChatCommands(raw: string, outputs: ClinicalOutputs): AppliedCommands {
   const working: ClinicalOutputs = { ...outputs };
   const edits: ChatEdit[] = [];
@@ -97,7 +103,7 @@ export function applyChatCommands(raw: string, outputs: ClinicalOutputs): Applie
 
   for (const block of raw.matchAll(COMMAND_REGEX)) {
     try {
-      const command = JSON.parse(block[1]);
+      const command = JSON.parse(sanitizeJsonNewlines(block[1]));
       const key = command.field as keyof ClinicalOutputs;
       if (!EDITABLE_FIELDS.includes(key)) {
         failures.push(`campo desconhecido: ${command.field}`);
@@ -228,10 +234,15 @@ export function useCopilotChat({
         throw new Error(message);
       }
 
-      await processStream(res, (chunk) => {
-        raw += chunk;
-        patch({ content: visibleStreamText(raw) });
-      });
+      let streamErr: string | undefined;
+      try {
+        await processStream(res, (chunk) => {
+          raw += chunk;
+          patch({ content: visibleStreamText(raw) });
+        });
+      } catch (err) {
+        streamErr = err instanceof Error ? err.message : "Falha de conexão";
+      }
 
       // Patient switched while the reply streamed — never edit the new
       // patient's documents with commands aimed at the previous one.
@@ -252,6 +263,13 @@ export function useCopilotChat({
         });
       }
 
+      if (!touched.length && !streamErr && !raw.includes(COMMAND_OPEN)) {
+        const actionWords = /\b(adicionei|alterei|removi|criei|ajustei|tirei|inseri|troquei|montei|atualizei|coloquei)\b/i;
+        if (actionWords.test(text)) {
+          failures.push("resposta indica alteração mas nenhum comando foi gerado — peça novamente");
+        }
+      }
+
       const content =
         text ||
         (edits.length > 0
@@ -261,6 +279,7 @@ export function useCopilotChat({
         content,
         edits: edits.length > 0 ? edits : undefined,
         failures: failures.length > 0 ? failures : undefined,
+        error: streamErr,
       });
     } catch (err) {
       const partial = visibleStreamText(raw);
