@@ -37,6 +37,7 @@ import { DataBox } from "./components/DataBox";
 import { MedicalReportPrint } from "./components/MedicalReportPrint";
 import { LabTrendsModal } from "./components/LabTrendsModal";
 import { ConsultaCompareModal } from "./components/ConsultaCompareModal";
+import { CrmPanel } from "./components/CrmPanel";
 import {
   PinLogin,
   PatientSwitcher,
@@ -391,6 +392,11 @@ export default function Home() {
                   trashedPatients={sortedTrashedPatients}
                   onRestorePatient={handleRestorePatient}
                   onPermanentDelete={handlePermanentDelete}
+                />
+                <CrmPanel
+                  onSelectPatient={(kaufId) => {
+                    if (patients[kaufId]) handleSwitchPatient(kaufId);
+                  }}
                 />
                 <PatientSnapshot profile={patientProfile} onProfileChange={setPatientProfile} />
                 <DataSourcesStatus inputs={inputs} />

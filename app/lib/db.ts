@@ -114,6 +114,150 @@ export async function initDatabase(): Promise<void> {
   await sql`
     CREATE INDEX IF NOT EXISTS idx_consultas_patient_id ON consultas(patient_id, timestamp DESC)
   `;
+
+  await ensureCrmTables();
+}
+
+// --- CRM BRIDGE TABLES (agenda + alerts pushed by the Clinic OS CRM) ---
+
+let crmTablesReady: Promise<void> | null = null;
+
+/** Creates the CRM bridge tables on first use (idempotent, cached). */
+function ensureCrmTables(): Promise<void> {
+  if (!crmTablesReady) {
+    crmTablesReady = (async () => {
+      const sql = getDb();
+      await sql`
+        CREATE TABLE IF NOT EXISTS crm_agenda (
+          date TEXT PRIMARY KEY,
+          appointments JSONB NOT NULL DEFAULT '[]',
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS crm_alerts (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT,
+          patient_name TEXT,
+          message TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'media',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          dismissed_at TIMESTAMPTZ
+        )
+      `;
+    })().catch((err) => {
+      crmTablesReady = null; // allow retry on next call
+      throw err;
+    });
+  }
+  return crmTablesReady;
+}
+
+export interface CrmAgendaAppointment {
+  kauf_id: string | null;
+  cpf: string | null;
+  patient_name: string;
+  starts_at: string;
+  status: string;
+  service_name: string | null;
+  practitioner_name: string | null;
+  fase: string | null;
+}
+
+export interface CrmAlert {
+  id: string;
+  patientId: string | null;
+  patientName: string | null;
+  message: string;
+  severity: string;
+  createdAt: string;
+  dismissedAt: string | null;
+}
+
+export async function upsertCrmAgenda(
+  date: string,
+  appointments: CrmAgendaAppointment[]
+): Promise<void> {
+  await ensureCrmTables();
+  const sql = getDb();
+  await sql`
+    INSERT INTO crm_agenda (date, appointments, updated_at)
+    VALUES (${date}, ${JSON.stringify(appointments)}, NOW())
+    ON CONFLICT (date) DO UPDATE SET
+      appointments = EXCLUDED.appointments,
+      updated_at = NOW()
+  `;
+}
+
+export async function getCrmAgenda(
+  date: string
+): Promise<{ appointments: CrmAgendaAppointment[]; updatedAt: string } | null> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const rows = await sql`
+    SELECT appointments, updated_at as "updatedAt" FROM crm_agenda WHERE date = ${date}
+  `;
+  if (rows.length === 0) return null;
+  return {
+    appointments: rows[0].appointments as CrmAgendaAppointment[],
+    updatedAt:
+      rows[0].updatedAt instanceof Date
+        ? rows[0].updatedAt.toISOString()
+        : rows[0].updatedAt,
+  };
+}
+
+export async function insertCrmAlert(alert: {
+  id: string;
+  patientId: string | null;
+  patientName: string | null;
+  message: string;
+  severity: string;
+}): Promise<void> {
+  await ensureCrmTables();
+  const sql = getDb();
+  await sql`
+    INSERT INTO crm_alerts (id, patient_id, patient_name, message, severity)
+    VALUES (${alert.id}, ${alert.patientId}, ${alert.patientName}, ${alert.message}, ${alert.severity})
+    ON CONFLICT (id) DO NOTHING
+  `;
+}
+
+export async function getActiveCrmAlerts(): Promise<CrmAlert[]> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const rows = await sql`
+    SELECT
+      id, patient_id as "patientId", patient_name as "patientName",
+      message, severity,
+      created_at as "createdAt", dismissed_at as "dismissedAt"
+    FROM crm_alerts
+    WHERE dismissed_at IS NULL
+    ORDER BY created_at DESC
+    LIMIT 20
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    patientId: row.patientId,
+    patientName: row.patientName,
+    message: row.message,
+    severity: row.severity,
+    createdAt:
+      row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    dismissedAt:
+      row.dismissedAt instanceof Date
+        ? row.dismissedAt.toISOString()
+        : row.dismissedAt,
+  }));
+}
+
+export async function dismissCrmAlert(id: string): Promise<boolean> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const result = await sql`
+    UPDATE crm_alerts SET dismissed_at = NOW() WHERE id = ${id} RETURNING id
+  `;
+  return result.length > 0;
 }
 
 // --- PATIENT CRUD ---

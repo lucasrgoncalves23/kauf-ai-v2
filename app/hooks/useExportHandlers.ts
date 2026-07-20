@@ -38,6 +38,17 @@ export function useExportHandlers({
     window.print();
   }
 
+  // Fire-and-forget: sends the exported document to the Clinic OS CRM so it
+  // can be delivered to the patient via WhatsApp. Never blocks the export.
+  function notifyCrmExport(docType: "patient_pdf" | "prescription", content: string) {
+    if (!currentPatientId || !content.trim()) return;
+    fetch("/api/crm/export-notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getPinHeaders() },
+      body: JSON.stringify({ patientId: currentPatientId, docType, content }),
+    }).catch(() => {});
+  }
+
   // Generate and export patient-friendly PDF
   async function handleExportPatient() {
     setShowExportDropdown(false);
@@ -76,6 +87,8 @@ export function useExportHandlers({
         },
       });
 
+      notifyCrmExport("patient_pdf", data.text);
+
       // Small delay to allow state update, then print
       setTimeout(() => {
         window.print();
@@ -107,6 +120,8 @@ export function useExportHandlers({
         receita: outputs.receita,
       },
     });
+
+    notifyCrmExport("prescription", outputs.receita);
 
     // Use existing receita content for printing
     setPrescriptionContent(outputs.receita);
