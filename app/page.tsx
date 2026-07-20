@@ -91,7 +91,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [showLabTrends, setShowLabTrends] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
-  const [fullscreenPanel, setFullscreenPanel] = useState<'analise' | 'conduta' | 'receita' | 'copilot' | null>(null);
+  const [fullscreenPanel, setFullscreenPanel] = useState<'analise' | 'conduta' | 'receita' | 'copilot' | 'bioimpedancia' | 'laboratoriais' | 'genetica' | 'wearable' | null>(null);
   const [patients, setPatients] = useState<Record<string, PatientRecord>>({});
   const [currentPatientId, setCurrentPatientId] = useState<string | null>(null);
 
@@ -470,7 +470,7 @@ export default function Home() {
                   />
                   <div className="grid grid-cols-2 gap-4 compact:gap-2">
                     {(["bioimpedancia", "laboratoriais", "genetica", "wearable"] as const).map((key) => (
-                      <DataBox key={key} title={key} value={inputs[key]} onChange={(v) => setInputs(p => ({...p, [key]: v}))} onImport={(f) => handleImport(f, key)} isLoading={loadingImport === key} />
+                      <DataBox key={key} title={key} value={inputs[key]} onChange={(v) => setInputs(p => ({...p, [key]: v}))} onImport={(f) => handleImport(f, key)} onMaximize={() => setFullscreenPanel(key)} isLoading={loadingImport === key} />
                     ))}
                   </div>
                 </section>
@@ -596,6 +596,8 @@ export default function Home() {
               outputs={outputs}
               onOutputChange={(field, value) => setOutputs(p => ({ ...p, [field]: value }))}
               onSaveAsExample={handleSaveAsExample}
+              inputs={inputs}
+              onInputChange={(field, value) => setInputs(p => ({ ...p, [field]: value }))}
               chatMessages={chatMessages}
               chatInput={chatInput}
               onChatInputChange={setChatInput}

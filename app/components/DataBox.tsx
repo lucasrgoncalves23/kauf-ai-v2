@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Paperclip, Pencil, Check } from "lucide-react";
+import { Paperclip, Pencil, Check, Maximize2 } from "lucide-react";
 import { Spinner } from "./ui/Spinner";
 import { OutputRenderer } from "./OutputRenderer";
 
@@ -11,6 +11,7 @@ export type DataBoxProps = {
   onChange: (v: string) => void;
   onImport?: (files: File[]) => void;
   onBlur?: () => void;
+  onMaximize?: () => void;
   isOutput?: boolean;
   isLoading?: boolean;
   isStreaming?: boolean;
@@ -25,6 +26,7 @@ export function DataBox({
   onChange,
   onImport,
   onBlur,
+  onMaximize,
   isOutput = false,
   isLoading = false,
   isStreaming = false,
@@ -93,6 +95,16 @@ export function DataBox({
             >
               {isEditing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3 h-3" />}
               {isEditing ? "Concluir" : "Editar"}
+            </button>
+          )}
+          {!isOutput && onMaximize && (
+            <button
+              onClick={onMaximize}
+              className="flex items-center gap-1 text-2xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 px-2 py-1"
+              title="Tela cheia"
+            >
+              <Maximize2 className="w-3 h-3" />
+              Expandir
             </button>
           )}
           {!isOutput && onImport && (
