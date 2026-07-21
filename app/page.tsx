@@ -262,7 +262,7 @@ export default function Home() {
     isRunningAnalise, canRunAnalise, handleRunAnalise, handleStopAnalise,
     isRunningConduta, canRunConduta, handleRunConduta, handleStopConduta,
     isRunningReceita, canRunReceita, handleRunReceita, handleStopReceita,
-    previousOutputs, handleRestoreOutput,
+    previousOutputs, handleRestoreOutput, thinkingPreview,
   } = useGenerationWorkflow({
     inputs, outputs, setOutputs, setOriginalOutputs, setToast,
     currentPatientId, patientName: patientProfile.name,
@@ -499,6 +499,7 @@ export default function Home() {
                     onFullscreen={() => setFullscreenPanel('analise')}
                     minHeight={compact ? "min-h-[350px]" : "min-h-[600px]"}
                     isRunning={isRunningAnalise}
+                    thinkingText={thinkingPreview.analise}
                     canRestore={!!previousOutputs.analise && previousOutputs.analise !== outputs.analise}
                     onRestore={() => handleRestoreOutput("analise")}
                   />
@@ -512,6 +513,7 @@ export default function Home() {
                     onFullscreen={() => setFullscreenPanel('conduta')}
                     minHeight={compact ? "min-h-[180px]" : "min-h-[300px]"}
                     isRunning={isRunningConduta}
+                    thinkingText={thinkingPreview.conduta}
                     canRestore={!!previousOutputs.conduta && previousOutputs.conduta !== outputs.conduta}
                     onRestore={() => handleRestoreOutput("conduta")}
                   />
@@ -525,6 +527,7 @@ export default function Home() {
                     onFullscreen={() => setFullscreenPanel('receita')}
                     minHeight={compact ? "min-h-[180px]" : "min-h-[300px]"}
                     isRunning={isRunningReceita}
+                    thinkingText={thinkingPreview.receita}
                     canRestore={!!previousOutputs.receita && previousOutputs.receita !== outputs.receita}
                     onRestore={() => handleRestoreOutput("receita")}
                   />

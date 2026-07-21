@@ -1,6 +1,6 @@
 import { buildPrescriptionPrompt } from "@/app/lib/prompts";
 import { verifyClinicPin } from "@/app/lib/auth";
-import { getAnthropicClient, MODEL, cachedSystem, streamToSSE } from "@/app/lib/anthropic";
+import { getAnthropicClient, MODEL, GENERATION_TUNING, cachedSystem, streamToSSE } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
         max_tokens: 8192,
         system: cachedSystem(system),
         messages: [{ role: "user", content: user }],
+        ...GENERATION_TUNING,
       },
       { signal: req.signal }
     );

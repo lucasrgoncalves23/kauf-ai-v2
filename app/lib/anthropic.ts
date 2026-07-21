@@ -8,6 +8,17 @@ import { logger } from "./logger";
 
 export const MODEL = "claude-sonnet-5";
 
+/**
+ * Sonnet 5 thinking config, shared by the generation routes: summarized
+ * thinking (streamed to the UI as a live preview) at medium effort so the
+ * silent reasoning phase stays short. Cast needed — SDK 0.71 predates these
+ * params, but the API accepts them and the SDK forwards unknown body fields.
+ */
+export const GENERATION_TUNING = {
+  thinking: { type: "adaptive", display: "summarized" },
+  output_config: { effort: "medium" },
+} as unknown as Partial<Anthropic.Messages.MessageCreateParams>;
+
 export function getAnthropicClient(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey.trim().length < 10) return null;
@@ -38,8 +49,9 @@ type AnthropicMessageStream = AsyncIterable<Anthropic.Messages.RawMessageStreamE
 
 /**
  * Re-encode an SDK message stream as the app's SSE format:
- * `data: {"text": ...}` chunks, `data: {"error": ...}` on truncation/refusal
- * or failure, always terminated by `data: [DONE]`.
+ * `data: {"text": ...}` chunks, `data: {"thinking": ...}` reasoning-summary
+ * chunks (shown as a preview while the model thinks), `data: {"error": ...}`
+ * on truncation/refusal or failure, always terminated by `data: [DONE]`.
  */
 export function streamToSSE(stream: AnthropicMessageStream): Response {
   const encoder = new TextEncoder();
@@ -53,6 +65,8 @@ export function streamToSSE(stream: AnthropicMessageStream): Response {
         for await (const event of stream) {
           if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
             send({ text: event.delta.text });
+          } else if (event.type === "content_block_delta" && event.delta.type === "thinking_delta") {
+            send({ thinking: event.delta.thinking });
           } else if (event.type === "message_delta" && event.delta.stop_reason) {
             const warning = STOP_REASON_MESSAGES[event.delta.stop_reason];
             if (warning) send({ error: warning });

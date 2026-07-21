@@ -12,12 +12,15 @@ import { logger } from "../lib/logger";
  * @param response - Fetch Response with streaming body
  * @param onChunk - Callback for each text chunk received
  * @param signal - Optional AbortSignal to cancel the stream
+ * @param onThinking - Optional callback for reasoning-summary chunks emitted
+ *   while the model thinks, before any text arrives
  * @returns The full accumulated text
  */
 export async function processStream(
   response: Response,
   onChunk: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onThinking?: (text: string) => void
 ): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) return "";
@@ -55,6 +58,9 @@ export async function processStream(
             if (parsed.text) {
               fullText += parsed.text;
               onChunk(parsed.text);
+            }
+            if (parsed.thinking && onThinking) {
+              onThinking(parsed.thinking);
             }
             // Server reports truncation/refusal/failure as an error event
             if (parsed.error) {

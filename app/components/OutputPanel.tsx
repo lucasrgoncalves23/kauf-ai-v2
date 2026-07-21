@@ -29,6 +29,7 @@ type OutputPanelProps = {
   onFullscreen: () => void;
   minHeight: string;
   isRunning?: boolean;
+  thinkingText?: string;
   canRestore?: boolean;
   onRestore?: () => void;
 };
@@ -43,6 +44,7 @@ export function OutputPanel({
   onFullscreen,
   minHeight,
   isRunning = false,
+  thinkingText,
   canRestore,
   onRestore,
 }: OutputPanelProps) {
@@ -84,6 +86,7 @@ export function OutputPanel({
         onBlur={onBlur}
         isOutput
         isStreaming={isRunning}
+        thinkingText={thinkingText}
         minHeight={minHeight}
         titleColor={color !== "emerald" ? colors.label : undefined}
       />

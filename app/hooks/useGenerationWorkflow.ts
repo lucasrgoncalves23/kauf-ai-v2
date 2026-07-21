@@ -34,6 +34,16 @@ export function useGenerationWorkflow({
   const [isRunningReceita, setIsRunningReceita] = useState(false);
   // Last version of each output before it was regenerated, for "Restaurar"
   const [previousOutputs, setPreviousOutputs] = useState<Partial<ClinicalOutputs>>({});
+  // Live reasoning summary shown while the model thinks, before text arrives
+  const [thinkingPreview, setThinkingPreview] = useState<Partial<Record<keyof ClinicalOutputs, string>>>({});
+
+  function appendThinking(field: keyof ClinicalOutputs, chunk: string) {
+    setThinkingPreview((p) => ({ ...p, [field]: (p[field] || "") + chunk }));
+  }
+
+  function clearThinking(field: keyof ClinicalOutputs) {
+    setThinkingPreview((p) => (p[field] ? { ...p, [field]: "" } : p));
+  }
 
   function stashPrevious(field: keyof ClinicalOutputs) {
     const current = outputs[field];
@@ -81,6 +91,7 @@ export function useGenerationWorkflow({
     setIsRunningAnalise(true);
     stashPrevious("analise");
     setOutputs((prev) => ({ ...prev, analise: "" }));
+    clearThinking("analise");
 
     try {
       const approvedCorrections = getCorrections("analise", true).slice(0, 3);
@@ -101,8 +112,12 @@ export function useGenerationWorkflow({
 
       await processStream(
         response,
-        (chunk) => setOutputs((prev) => ({ ...prev, analise: prev.analise + chunk })),
-        analiseAbortRef.current.signal
+        (chunk) => {
+          clearThinking("analise");
+          setOutputs((prev) => ({ ...prev, analise: prev.analise + chunk }));
+        },
+        analiseAbortRef.current.signal,
+        (chunk) => appendThinking("analise", chunk)
       );
 
       onEngineUpdate();
@@ -131,6 +146,7 @@ export function useGenerationWorkflow({
       }
     } finally {
       setIsRunningAnalise(false);
+      clearThinking("analise");
       analiseAbortRef.current = null;
     }
   }
@@ -152,6 +168,7 @@ export function useGenerationWorkflow({
     setIsRunningConduta(true);
     stashPrevious("conduta");
     setOutputs((prev) => ({ ...prev, conduta: "" }));
+    clearThinking("conduta");
 
     try {
       const approvedCorrections = getCorrections("conduta", true).slice(0, 3);
@@ -172,8 +189,12 @@ export function useGenerationWorkflow({
 
       await processStream(
         response,
-        (chunk) => setOutputs((prev) => ({ ...prev, conduta: prev.conduta + chunk })),
-        condutaAbortRef.current.signal
+        (chunk) => {
+          clearThinking("conduta");
+          setOutputs((prev) => ({ ...prev, conduta: prev.conduta + chunk }));
+        },
+        condutaAbortRef.current.signal,
+        (chunk) => appendThinking("conduta", chunk)
       );
 
       onEngineUpdate();
@@ -202,6 +223,7 @@ export function useGenerationWorkflow({
       }
     } finally {
       setIsRunningConduta(false);
+      clearThinking("conduta");
       condutaAbortRef.current = null;
     }
   }
@@ -223,6 +245,7 @@ export function useGenerationWorkflow({
     setIsRunningReceita(true);
     stashPrevious("receita");
     setOutputs((prev) => ({ ...prev, receita: "" }));
+    clearThinking("receita");
 
     try {
       const response = await fetch("/api/generate-prescription", {
@@ -242,8 +265,12 @@ export function useGenerationWorkflow({
 
       await processStream(
         response,
-        (chunk) => setOutputs((prev) => ({ ...prev, receita: prev.receita + chunk })),
-        receitaAbortRef.current.signal
+        (chunk) => {
+          clearThinking("receita");
+          setOutputs((prev) => ({ ...prev, receita: prev.receita + chunk }));
+        },
+        receitaAbortRef.current.signal,
+        (chunk) => appendThinking("receita", chunk)
       );
 
       if (!receitaAbortRef.current.signal.aborted) {
@@ -270,6 +297,7 @@ export function useGenerationWorkflow({
       }
     } finally {
       setIsRunningReceita(false);
+      clearThinking("receita");
       receitaAbortRef.current = null;
     }
   }
@@ -297,5 +325,7 @@ export function useGenerationWorkflow({
     // Restore
     previousOutputs,
     handleRestoreOutput,
+    // Live reasoning preview while the model thinks
+    thinkingPreview,
   };
 }

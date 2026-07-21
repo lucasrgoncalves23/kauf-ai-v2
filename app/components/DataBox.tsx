@@ -15,6 +15,7 @@ export type DataBoxProps = {
   isOutput?: boolean;
   isLoading?: boolean;
   isStreaming?: boolean;
+  thinkingText?: string;
   placeholder?: string;
   minHeight?: string;
   titleColor?: string;
@@ -30,6 +31,7 @@ export function DataBox({
   isOutput = false,
   isLoading = false,
   isStreaming = false,
+  thinkingText,
   placeholder,
   minHeight = "min-h-[100px]",
   titleColor,
@@ -84,7 +86,7 @@ export function DataBox({
           {isOutput && isStreaming && (
             <span className="flex items-center gap-1.5 text-2xs font-medium text-brand-600 dark:text-brand-400">
               <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
-              Gerando…
+              {!value && thinkingText ? "Analisando…" : "Gerando…"}
             </span>
           )}
           {isOutput && !isStreaming && value.trim() && (
@@ -139,6 +141,15 @@ export function DataBox({
         >
           {value ? (
             <OutputRenderer text={value} streaming={isStreaming} />
+          ) : isStreaming && thinkingText ? (
+            // Reasoning preview while the model thinks — replaced by the real text
+            <div className="italic text-slate-400 dark:text-slate-500 whitespace-pre-wrap">
+              {thinkingText}
+              <span
+                aria-hidden
+                className="animate-caret inline-block w-0.5 h-[1.05em] translate-y-[0.18em] bg-brand-500 ml-0.5"
+              />
+            </div>
           ) : (
             <span className="text-slate-300 dark:text-slate-600">
               {placeholder || "Clique para editar..."}
