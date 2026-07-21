@@ -143,12 +143,17 @@ export function DataBox({
             <OutputRenderer text={value} streaming={isStreaming} />
           ) : isStreaming && thinkingText ? (
             // Reasoning preview while the model thinks — replaced by the real text
-            <div className="italic text-slate-400 dark:text-slate-500 whitespace-pre-wrap">
-              {thinkingText}
-              <span
-                aria-hidden
-                className="animate-caret inline-block w-0.5 h-[1.05em] translate-y-[0.18em] bg-brand-500 ml-0.5"
-              />
+            <div>
+              <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Raciocínio da IA (prévia)
+              </div>
+              <div className="italic text-slate-400 dark:text-slate-500 whitespace-pre-wrap">
+                {thinkingText}
+                <span
+                  aria-hidden
+                  className="animate-caret inline-block w-0.5 h-[1.05em] translate-y-[0.18em] bg-brand-500 ml-0.5"
+                />
+              </div>
             </div>
           ) : (
             <span className="text-slate-300 dark:text-slate-600">
