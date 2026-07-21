@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { processStream } from "../utils/stream";
 import { getCorrections } from "../lib/corrections";
+import { condenseInputs } from "../lib/condense";
 import { getPinHeaders } from "../lib/api-client";
 import { logGeneration } from "../lib/audit";
 import { logger } from "../lib/logger";
@@ -98,10 +99,14 @@ export function useGenerationWorkflow({
 
       const phaseContext = engineStatus ? { phase: engineStatus.phase, waiting: engineStatus.waiting } : undefined;
 
+      // Invisible pre-step: huge pasted exams are distilled into structured
+      // summaries before generation (falls back to raw text on failure).
+      const patient = await condenseInputs(inputs, analiseAbortRef.current.signal);
+
       const response = await fetch("/api/generate-analise", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getPinHeaders() },
-        body: JSON.stringify({ patient: inputs, corrections: approvedCorrections, phaseContext }),
+        body: JSON.stringify({ patient, corrections: approvedCorrections, phaseContext }),
         signal: analiseAbortRef.current.signal,
       });
 
@@ -175,10 +180,14 @@ export function useGenerationWorkflow({
 
       const phaseContext = engineStatus ? { phase: engineStatus.phase, waiting: engineStatus.waiting } : undefined;
 
+      // Invisible pre-step: huge pasted exams are distilled into structured
+      // summaries before generation (falls back to raw text on failure).
+      const patient = await condenseInputs(inputs, condutaAbortRef.current.signal);
+
       const response = await fetch("/api/generate-conduta", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getPinHeaders() },
-        body: JSON.stringify({ patient: inputs, corrections: approvedCorrections, phaseContext }),
+        body: JSON.stringify({ patient, corrections: approvedCorrections, phaseContext }),
         signal: condutaAbortRef.current.signal,
       });
 

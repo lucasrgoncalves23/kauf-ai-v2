@@ -73,6 +73,7 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | [audit.ts](app/lib/audit.ts) | Client-side audit log (localStorage) |
 | [crm.ts](app/lib/crm.ts) | Outbound CRM notifications |
 | [clientPdf.ts](app/lib/clientPdf.ts) | Browser-side pdf.js text extraction / page render / image compression |
+| [condense.ts](app/lib/condense.ts) | Invisible pre-generation step: input fields >15k chars are condensed via `/api/condense-exam` (Haiku) with in-memory caching; the doctor's input boxes are never modified |
 
 ### API Routes (`app/api/`)
 
@@ -84,6 +85,7 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | `/api/generate-patient-pdf` | Patient-friendly plan (non-streaming) |
 | `/api/chat-assistant` | KAUAI copilot; replies may embed multiple `:::COMMAND:::` JSON blocks (`edit` find/replace, `append`, `set`) targeting analise/conduta/receita |
 | `/api/import-pdf` | PDF/image OCR (pdf-parse fast path → Claude Vision fallback) |
+| `/api/condense-exam` | Haiku extraction pass: distills oversized exam text into a structured summary before generation (called invisibly by [condense.ts](app/lib/condense.ts); falls back to raw text on failure) |
 | `/api/patients`, `/api/patients/[id]`, `/api/patients/[id]/consultas`, `/api/consultas` | Patient/consulta CRUD (Neon) |
 | `/api/verify-pin` | PIN login (rate-limited) |
 | `/api/db/init` | Schema init (admin key or PIN) |

@@ -11,6 +11,9 @@ import { logger } from "./logger";
 // accepts temperature (both of which broke with claude-sonnet-5).
 export const MODEL = "claude-sonnet-4-5-20250929";
 
+// Fast/cheap model for the pre-generation exam condensation pass.
+export const EXTRACT_MODEL = "claude-haiku-4-5";
+
 export function getAnthropicClient(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey || apiKey.trim().length < 10) return null;
