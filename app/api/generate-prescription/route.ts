@@ -1,6 +1,6 @@
 import { buildPrescriptionPrompt } from "@/app/lib/prompts";
 import { verifyClinicPin } from "@/app/lib/auth";
-import { getAnthropicClient, MODEL, GENERATION_TUNING, cachedSystem, streamToSSE } from "@/app/lib/anthropic";
+import { getAnthropicClient, MODEL, streamToSSE } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -21,15 +21,12 @@ export async function POST(req: Request) {
       return Response.json({ error: "Conduta não fornecida" }, { status: 400 });
     }
 
-    const { system, user } = buildPrescriptionPrompt(conduta, patientName);
-
     const stream = client.messages.stream(
       {
         model: MODEL,
         max_tokens: 8192,
-        system: cachedSystem(system),
-        messages: [{ role: "user", content: user }],
-        ...GENERATION_TUNING,
+        temperature: 0.3,
+        messages: [{ role: "user", content: buildPrescriptionPrompt(conduta, patientName) }],
       },
       { signal: req.signal }
     );

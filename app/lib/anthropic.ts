@@ -6,18 +6,10 @@ import { logger } from "./logger";
  * The SDK gives automatic retries on 429/5xx and typed errors.
  */
 
-export const MODEL = "claude-sonnet-5";
-
-/**
- * Sonnet 5 thinking config, shared by the generation routes: summarized
- * thinking (streamed to the UI as a live preview) at medium effort so the
- * silent reasoning phase stays short. Cast needed — SDK 0.71 predates these
- * params, but the API accepts them and the SDK forwards unknown body fields.
- */
-export const GENERATION_TUNING = {
-  thinking: { type: "adaptive", display: "summarized" },
-  output_config: { effort: "medium" },
-} as unknown as Partial<Anthropic.Messages.MessageCreateParams>;
+// June 2026 production model, restored at the clinic's request — Sonnet 4.5
+// has no adaptive thinking, so it starts streaming text immediately and
+// accepts temperature (both of which broke with claude-sonnet-5).
+export const MODEL = "claude-sonnet-4-5-20250929";
 
 export function getAnthropicClient(): Anthropic | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;

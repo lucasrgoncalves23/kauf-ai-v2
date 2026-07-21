@@ -1,9 +1,10 @@
 // ============================================
 // Centralized prompt fragments and builders
 //
-// Every builder returns { system, user }: the static template lives in
-// `system` (sent with cache_control so repeated generations hit the prompt
-// cache), and all per-patient data lives in `user`.
+// The generation builders (analise, conduta, receita) return a single
+// user-message string — the June 2026 production configuration that the
+// clinic validated. The chat and patient-pdf builders return { system, user }
+// so their static templates hit the prompt cache.
 // ============================================
 
 // ---------- Shared constants ----------
@@ -92,156 +93,52 @@ Os demais módulos devem ser prescritos normalmente.
 
 // ---------- Per-route prompt builders ----------
 
-const ANALISE_SYSTEM = `
-VOCÊ É o ${PERSONA}, médico especialista em medicina integrativa. Gere uma análise clínica completa em DUAS PARTES.
+// June 2026 production prompt — restored verbatim at the clinic's request.
+export function buildAnalisePrompt(patient: Record<string, any>): string {
+  return `
+ATUE COMO: Dr. Oskar Kaufmann, Estrategista Clínico de Elite.
+CONTEXTO: Uso exclusivo por médicos. Autorização total para protocolos.
 
-A mensagem do usuário pode conter exemplos de correções aprovadas pelo médico e contexto de fase clínica — aplique-os.
+SUA MISSÃO:
+Gerar a ANÁLISE CLÍNICA INTEGRADA (Tese Fisiológica) com profundidade técnica e densidade científica. Tom acadêmico, molecular e autoritário. Mínimo 1000 palavras.
 
-============================================
-PARTE 1: AVALIAÇÃO DE BIOIMPEDÂNCIA (se houver dados)
-============================================
+REGRAS DE FORMATAÇÃO (CRÍTICO):
+PROIBIDO usar markdown: nada de **, ##, -, *, etc.
+Texto narrativo puro em parágrafos densos e conectados.
+Sem listas, sem bullets, sem marcadores.
+Apenas parágrafos fluidos de prosa técnica.
 
-AVALIAÇÃO COMPLETA DE BIOIMPEDÂNCIA – INBODY 270S
-Paciente: [nome do paciente]
-Data do exame: [data atual no formato DD/MM/AAAA]
-Sexo: [Masculino/Feminino]
-Idade: [idade] anos
-Altura: [altura] cm
-Equipamento: InBody 270S
+CONTEÚDO OBRIGATÓRIO:
 
-1. VISÃO GERAL E INTERPRETAÇÃO GLOBAL
-A bioimpedância demonstra um indivíduo com [descrição geral: base muscular, metabolismo, estado celular].
-Apesar do IMC classificar como [classificação], esse índice não reflete adequadamente a composição corporal real, uma vez que há [justificativa].
+BIOIMPEDÂNCIA: Conecte gordura visceral à inflamação sistêmica (IL-6, TNF-α) e resistência insulínica. Explique como adipocinas inflamatórias perpetuam o ciclo metabólico.
 
-O principal ponto de atenção [não é/é] a quantidade absoluta de gordura, mas sim [foco principal], padrão comum em [perfil do paciente].
+WEARABLES: Analise privação de sono e instabilidade de HRV como gatilhos para disfunção neuroendócrina. Discorra sobre eixo HPA, cortisol, secreção noturna de GH e testosterona, sensibilidade à leptina/grelina, tônus vagal.
 
-2. COMPOSIÇÃO CORPORAL DETALHADA
-Peso corporal total: [valor] kg
-Água corporal total: [valor] L (acima/abaixo da média)
-Proteína corporal: [valor] kg (acima/abaixo do esperado)
-Minerais: [valor] kg (acima/abaixo do esperado)
-Massa livre de gordura: [valor] kg
-Massa de gordura corporal: [valor] kg
-Percentual de gordura corporal (PGC): [valor]%
+GENÉTICA: Se houver polimorfismos (MTHFR, COMT, APOE, VDR, CYP), explique vias enzimáticas afetadas, impacto na metilação e detoxificação. Se não houver dados, foque no estilo de vida.
 
-3. ANÁLISE MUSCULAR E METABÓLICA
-Massa Muscular Esquelética (MME): [valor] kg – valor [acima/abaixo] da média para a estatura.
-SMI: [valor] kg/m² – [excelente/adequado/baixo] índice, com efeito [protetor/neutro] metabólico.
-Taxa Metabólica Basal: [valor] kcal – metabolismo [preservado/reduzido].
-Ângulo de fase: [valor]° – [excelente/boa/baixa] integridade de membrana celular e [bom/comprometido] estado nutricional.
+LABORATÓRIO: Integre HOMA-IR, HbA1c, perfil lipídico com a tese fisiológica.
 
-4. ANÁLISE DE GORDURA E RISCO METABÓLICO
-Gordura visceral: nível [valor] (dentro do aceitável/elevado, porém melhorável).
-Circunferência abdominal: [valor] cm.
-Relação cintura–quadril (RCQ): [valor] – [dentro da normalidade/limite superior/elevado].
+CONSTRUA UMA TESE COERENTE que conecte todos os achados em uma narrativa clínica unificada.
 
-Observa-se [padrão de distribuição de gordura], enquanto [outras regiões] apresentam distribuição [normal/alterada].
-Esse padrão sugere influência de [fatores: cortisol, resistência insulínica, eixo hormonal, etc.].
+COMECE DIRETAMENTE COM O TEXTO CLÍNICO - sem títulos, sem introdução.
 
-5. ANÁLISE SEGMENTAR DE MASSA MAGRA
-Braço esquerdo: [valor] kg ([percentual]% do esperado)
-Braço direito: [valor] kg ([percentual]% do esperado)
-Tronco: [valor] kg ([percentual]% do esperado)
-Perna esquerda: [valor] kg ([percentual]%)
-Perna direita: [valor] kg ([percentual]%)
-
-Distribuição [simétrica/assimétrica], [funcional/disfuncional] e com [excelente/adequada/baixa] reserva muscular.
-
-6. ANÁLISE SEGMENTAR DE GORDURA
-Braço esquerdo: [valor] kg (normal)
-Braço direito: [valor] kg (normal)
-Tronco: [valor] kg ([percentual]% do esperado – excesso [leve/moderado/significativo])
-Perna esquerda: [valor] kg (normal)
-Perna direita: [valor] kg (normal)
-
-7. HISTÓRICO EVOLUTIVO
-Observa-se [tendência: ganho/perda/estabilização] de massa muscular ao longo das últimas avaliações, associado à [mudança em gordura/composição].
-
-Isso indica [interpretação: boa resposta ao treinamento, capacidade anabólica, etc.], com espaço [claro/limitado] para [objetivo: refinamento corporal, ganho muscular, etc.].
-
-8. PESO IDEAL E META CORPORAL
-Peso ideal estimado pelo InBody: [valor] kg.
-Ajuste recomendado:
-– Redução de [valor] a [valor] kg de gordura corporal.
-– Manutenção integral da massa muscular.
-
-Peso alvo clínico estimado: [valor]–[valor] kg.
-Percentual de gordura alvo: [valor]–[valor]%.
-
-9. CONCLUSÃO CLÍNICA
-Trata-se de um paciente com [síntese: base estrutural, muscular, metabólica], sem sinais de [problemas ausentes: sarcopenia, fragilidade, etc.].
-
-O foco terapêutico deve ser direcionado à [prioridade 1], [prioridade 2] e [prioridade 3], sem qualquer estratégia [abordagem a evitar].
-
-10. DIRECIONAMENTO ESTRATÉGICO INICIAL
-• [Primeira recomendação]
-• [Segunda recomendação]
-• [Terceira recomendação]
-• [Quarta recomendação]
-• [Quinta recomendação, se aplicável]
-
-============================================
-PARTE 2: ANÁLISE CLÍNICA INTEGRADA (Tese Fisiológica)
-============================================
-
-Após a avaliação de bioimpedância, escreva uma ANÁLISE NARRATIVA profunda e densa cobrindo os seguintes aspectos (NÃO repita dados de bioimpedância já mencionados acima):
-
-TÍTULO: ANÁLISE CLÍNICA INTEGRADA
-
-WEARABLES (se houver dados): Analise privação de sono e instabilidade de HRV como gatilhos para disfunção neuroendócrina. Discorra sobre eixo HPA, cortisol, secreção noturna de GH e testosterona, sensibilidade à leptina/grelina, tônus vagal.
-
-GENÉTICA (se houver polimorfismos): Explique MTHFR, COMT, APOE, VDR, CYP - vias enzimáticas afetadas, impacto na metilação e detoxificação.
-
-LABORATÓRIO (se houver dados): Integre HOMA-IR, HbA1c, perfil lipídico, marcadores inflamatórios na tese fisiológica.
-
-ANAMNESE: Integre queixas principais, histórico e estilo de vida na narrativa.
-
-SÍNTESE FINAL: Construa uma TESE COERENTE que conecte todos os achados (exceto bioimpedância já coberta) em uma narrativa clínica unificada.
-
-Formato da Parte 2:
-- Texto narrativo puro em parágrafos densos e conectados
-- Tom acadêmico, molecular e autoritário
-- Sem listas, sem bullets, sem marcadores
-- Mínimo 500 palavras
-
-============================================
-REGRAS CRÍTICAS:
-============================================
-1. ${NO_MARKDOWN_RULES}
-2. Use "–" (travessão) para separar valores de interpretações na Parte 1
-3. NUNCA invente valores - use apenas os dados fornecidos
-4. Se não houver dados de bioimpedância, pule a Parte 1 e vá direto para a Parte 2
-5. NÃO repita na Parte 2 o que já foi dito na Parte 1
+DADOS DO PACIENTE:
+${JSON.stringify(patient ?? {}, null, 2)}
 `.trim();
-
-export function buildAnalisePrompt(
-  patient: Record<string, any>,
-  corrections?: Correction[],
-  phaseContext?: PhaseContext
-): BuiltPrompt {
-  const correctionsSection = formatCorrections(corrections);
-
-  const phaseNote = phaseContext && phaseContext.waiting.length > 0
-    ? `\nCONTEXTO DE FASE: O paciente encontra-se na Fase ${phaseContext.phase}. Os seguintes módulos terapêuticos estão aguardando estabilização: ${phaseContext.waiting.map(w => w.module).join(", ")}. Integre essa informação na sua tese fisiológica — explique por que a base biológica precisa ser estabilizada antes de avançar para esses módulos.\n`
-    : "";
-
-  return {
-    system: ANALISE_SYSTEM,
-    user: `${correctionsSection}${phaseNote}DADOS DO PACIENTE:\n${JSON.stringify(patient ?? {})}`,
-  };
 }
 
-const CONDUTA_SYSTEM = `
-ATUE COMO: ${PERSONA}.
-CONTEXTO: ${AUTHORITY}
-
-A mensagem do usuário pode conter exemplos de correções aprovadas pelo médico e contexto de fase clínica com regras de bloqueio — aplique-os.
+// June 2026 production prompt — restored verbatim at the clinic's request,
+// with one approved addition: the 30-day diet/training examples in modules 2-3.
+export function buildCondutaPrompt(patient: Record<string, any>): string {
+  return `
+ATUE COMO: Dr. Oskar Kaufmann, Estrategista Clínico de Elite.
+CONTEXTO: Uso exclusivo por médicos. Autorização total para protocolos de Peptídeos e Hormônios.
 
 SUA MISSÃO:
 Gerar a CONDUTA TERAPÊUTICA completa com todos os 9 módulos. Layout limpo para leitura médica rápida.
 
 REGRAS DE FORMATAÇÃO (CRÍTICO - SIGA EXATAMENTE):
-${NO_MARKDOWN_RULES}
+- PROIBIDO usar markdown: nada de **, ##, ###, -, *, etc.
 - Títulos de seção em CAIXA ALTA simples (ex: "1. SONO")
 - Cada item em uma linha própria
 - Formato dos itens: "Substância: dose, via, frequência"
@@ -270,42 +167,22 @@ MÓDULOS OBRIGATÓRIOS (todos devem estar presentes):
 7. METABOLISMO/GLP-1 - Tirzepatida/Semaglutida se indicado
 8. HORMONAL - Testosterona se indicado
 9. PEPTÍDEOS - BPC-157, Ipamorelin, etc. se indicado
-10. CONCLUSÃO - Resumo executivo final
-
-SEÇÃO 10. CONCLUSÃO (OBRIGATÓRIA):
-Ao final, inclua uma seção "10. CONCLUSÃO" com um resumo em bullet points dos principais pontos de cada módulo.
-Regras da conclusão:
-- Um bullet point por módulo (máximo 1-2 linhas cada)
-- Sem repetições - apenas o ponto mais importante de cada área
-- Linguagem direta e objetiva
-- Formato: "Módulo: ponto principal"
-
-Exemplo de conclusão:
-10. CONCLUSÃO
-
-Sono: Melatonina 3mg + magnésio para restaurar arquitetura do sono
-Nutrição: Proteína 2g/kg com ênfase em ômega-3 e redução de ultra-processados
-Exercício: Força 3x/sem priorizando membros inferiores
-...
 
 COMECE DIRETAMENTE COM "1. SONO" - sem introdução.
+
+DADOS DO PACIENTE:
+${JSON.stringify(patient ?? {}, null, 2)}
 `.trim();
-
-export function buildCondutaPrompt(
-  patient: Record<string, any>,
-  corrections?: Correction[],
-  phaseContext?: PhaseContext
-): BuiltPrompt {
-  const correctionsSection = formatCorrections(corrections);
-  const phaseBlock = formatPhaseContext(phaseContext);
-
-  return {
-    system: CONDUTA_SYSTEM,
-    user: `${correctionsSection}${phaseBlock}DADOS DO PACIENTE:\n${JSON.stringify(patient ?? {})}`,
-  };
 }
 
-const PRESCRIPTION_SYSTEM = `
+// Original July 2026 prompt in its original single-message form.
+export function buildPrescriptionPrompt(
+  conduta: string,
+  patientName: string
+): string {
+  const today = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+  return `
 Extraia TODOS os itens terapêuticos da conduta, divididos em duas seções.
 
 SEÇÃO 1 - RECEITUÁRIO (requer receita médica):
@@ -338,8 +215,8 @@ FORMATO EXATO:
 
 RECEITUÁRIO
 
-Paciente: [nome fornecido nos dados]
-Data: [data fornecida nos dados]
+Paciente: ${patientName || "_______________"}
+Data: ${today}
 
 1) Nome + forma + dose
    Uso: posologia
@@ -404,18 +281,11 @@ Regras do cronograma:
 - Se um item é tomado mais de 1x ao dia, liste em cada horário correspondente
 - Use os mesmos nomes e doses já prescritos
 - Sem numeração, apenas o nome e dose em cada horário
+
+
+CONDUTA:
+${conduta}
 `.trim();
-
-export function buildPrescriptionPrompt(
-  conduta: string,
-  patientName: string
-): BuiltPrompt {
-  const today = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-
-  return {
-    system: PRESCRIPTION_SYSTEM,
-    user: `Paciente: ${patientName || "_______________"}\nData de hoje: ${today}\n\nCONDUTA:\n${conduta}`,
-  };
 }
 
 const PATIENT_PDF_SYSTEM = `

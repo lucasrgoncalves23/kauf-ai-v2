@@ -17,7 +17,7 @@
 | Framework   | Next.js 16.1 (App Router)                          |
 | UI          | React 19, TypeScript                               |
 | Styling     | Tailwind CSS v4, PostCSS                           |
-| AI          | `@anthropic-ai/sdk`, model `claude-sonnet-5`       |
+| AI          | `@anthropic-ai/sdk`, model `claude-sonnet-4-5-20250929` |
 | Database    | Neon serverless Postgres (`@neondatabase/serverless`) |
 | PDF (server)| `pdf-parse` (text extraction, Vision fallback)     |
 | PDF (client)| `pdfjs-dist` (large-file text extraction + page OCR) |
@@ -46,14 +46,14 @@ All API routes require the `X-Clinic-Pin` header, verified server-side by [auth.
 ## AI Pipeline
 
 - [anthropic.ts](app/lib/anthropic.ts) — shared SDK client (`getAnthropicClient`), `cachedSystem()` (prompt-cache system blocks), `streamToSSE()` (re-encodes SDK stream as `data: {"text"}` SSE; emits `data: {"error"}` on `max_tokens`/`refusal` stop reasons), `messageText()` (extracts text block, skipping thinking blocks).
-- [prompts.ts](app/lib/prompts.ts) — every builder returns `{ system, user }`: static template in `system` (cacheable), per-patient data in `user`. Do not interpolate dynamic values into the system text.
-- Streaming routes (`generate-analise`, `generate-conduta`, `generate-prescription`) use `client.messages.stream(..., { signal: req.signal })` so client aborts cancel the upstream call. All AI routes set `maxDuration = 60`.
-- Client-side, [stream.ts](app/utils/stream.ts) `processStream()` accumulates chunks and **throws** if the server emitted an error event (truncation/refusal) — hooks surface it as a toast while keeping partial text visible.
-- Sonnet 5 notes: `temperature` is rejected; adaptive thinking is on by default (responses may begin with a `thinking` block — always use `messageText()`/find the text block, never `content[0]`).
+- [prompts.ts](app/lib/prompts.ts) — the generation builders (analise, conduta, receita) return a single user-message string: the June 2026 production prompts, restored verbatim at the clinic's request (plus the approved 30-day diet/training additions in the conduta). Do NOT restructure them into system/user or "improve" their wording without the doctor's sign-off — output quality regressed the last time this was done. The chat and patient-pdf builders still return `{ system, user }` for prompt caching.
+- Streaming routes (`generate-analise`, `generate-conduta`, `generate-prescription`) use `client.messages.stream(..., { signal: req.signal })` so client aborts cancel the upstream call, with `max_tokens: 8192`, `temperature: 0.3`, no system block, no thinking — the June production configuration. AI routes set `maxDuration = 300` (clamped to 60s on the free Vercel plan).
+- Client-side, [stream.ts](app/utils/stream.ts) `processStream()` accumulates chunks and **throws** if the server emitted an error event (truncation/refusal) — hooks surface it as a toast while keeping partial text visible. It also handles optional `{"thinking"}` preview chunks; Sonnet 4.5 never emits them, so the preview UI simply stays hidden.
+- Model migration warning: `claude-sonnet-5` was tried in July 2026 and rolled back — its always-on adaptive thinking consumed the token budget/time limit on large inputs (silent empty outputs) and it rejects `temperature`. Do not re-upgrade the model without testing against a 60+ page exam input on the production Vercel plan.
 
 ### Phase System (Engine)
 
-The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineStatus.ts) classifies Phase A/B/C from wearable metrics vs settings thresholds and produces `waiting: [{module, criteria}]`. That `phaseContext` is sent with generation requests, and `formatPhaseContext()` injects blocking rules ("AGUARDANDO: ...") into the conduta prompt. Enforcement is prompt-side.
+The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineStatus.ts) classifies Phase A/B/C from wearable metrics vs settings thresholds and produces `waiting: [{module, criteria}]`. The engine panel and the KAUAI chat still receive that status, but since the June-prompt restore the generation prompts no longer inject phase blocking rules or doctor-correction few-shot examples (the frontend still sends `corrections`/`phaseContext` in request bodies; the routes ignore them). `formatPhaseContext()`/`formatCorrections()` remain in prompts.ts, currently unused by any builder.
 
 ---
 

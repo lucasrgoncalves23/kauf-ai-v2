@@ -1,6 +1,6 @@
-import { buildCondutaPrompt, type Correction, type PhaseContext } from "@/app/lib/prompts";
+import { buildCondutaPrompt } from "@/app/lib/prompts";
 import { verifyClinicPin } from "@/app/lib/auth";
-import { getAnthropicClient, MODEL, GENERATION_TUNING, cachedSystem, streamToSSE } from "@/app/lib/anthropic";
+import { getAnthropicClient, MODEL, streamToSSE } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -15,20 +15,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { patient, corrections, phaseContext } = await req.json();
-    const { system, user } = buildCondutaPrompt(
-      patient,
-      corrections as Correction[],
-      phaseContext as PhaseContext | undefined
-    );
+    const { patient } = await req.json();
 
     const stream = client.messages.stream(
       {
         model: MODEL,
-        max_tokens: 16384,
-        system: cachedSystem(system),
-        messages: [{ role: "user", content: user }],
-        ...GENERATION_TUNING,
+        max_tokens: 8192,
+        temperature: 0.3,
+        messages: [{ role: "user", content: buildCondutaPrompt(patient) }],
       },
       { signal: req.signal }
     );
