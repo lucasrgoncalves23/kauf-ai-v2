@@ -29,6 +29,7 @@ export async function processStream(
   let buffer = "";
   let fullText = "";
   let streamError: string | null = null;
+  let sawDone = false;
 
   // Handle abort signal
   if (signal) {
@@ -51,7 +52,10 @@ export async function processStream(
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           const data = line.slice(6);
-          if (data === "[DONE]") continue;
+          if (data === "[DONE]") {
+            sawDone = true;
+            continue;
+          }
 
           try {
             const parsed = JSON.parse(data);
@@ -78,6 +82,13 @@ export async function processStream(
       return fullText;
     }
     logger.error("Stream processing error", { error: String(err) });
+  }
+
+  // The server always terminates with [DONE]; a stream that ends without it
+  // was cut off mid-flight (function timeout, network drop) — never silently
+  if (!sawDone && !streamError && !signal?.aborted) {
+    streamError =
+      "Conexão interrompida — o texto pode estar INCOMPLETO. Gere novamente.";
   }
 
   // Surface after draining so partial text stays visible in the editor

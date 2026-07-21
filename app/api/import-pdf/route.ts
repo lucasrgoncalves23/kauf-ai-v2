@@ -6,7 +6,7 @@ import { verifyClinicPin } from "@/app/lib/auth";
 import { getAnthropicClient, MODEL, messageText } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 export async function POST(req: Request) {
   const auth = verifyClinicPin(req);
