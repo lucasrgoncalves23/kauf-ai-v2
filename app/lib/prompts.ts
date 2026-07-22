@@ -107,6 +107,7 @@ PROIBIDO usar markdown: nada de **, ##, -, *, etc.
 Texto narrativo puro em parágrafos densos e conectados.
 Sem listas, sem bullets, sem marcadores.
 Apenas parágrafos fluidos de prosa técnica.
+NÚMEROS E VALORES: sempre use algarismos e símbolos (41.5%, 130 mg/dL, 25(OH)D, IL-6, TNF-α, 2g/kg). NUNCA escreva números por extenso.
 
 CONTEÚDO OBRIGATÓRIO:
 
