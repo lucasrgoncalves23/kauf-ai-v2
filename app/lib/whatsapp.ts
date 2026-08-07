@@ -9,7 +9,7 @@
  *           WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET
  */
 
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { logger } from "./logger";
 
 const API_VERSION = "v21.0";
@@ -277,18 +277,17 @@ export function verifyWebhookSignature(
 ): boolean {
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!appSecret) {
-    logger.warn("WhatsApp: WHATSAPP_APP_SECRET not set, skipping signature verification");
+    logger.warn("WhatsApp: WHATSAPP_APP_SECRET not set, rejecting webhook payload");
     return false;
   }
   if (!signature) return false;
 
   const expected =
-    "sha256=" +
-    createHmac("sha256", appSecret)
-      .update(typeof rawBody === "string" ? rawBody : rawBody)
-      .digest("hex");
+    "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
 
-  return signature === expected;
+  const got = Buffer.from(signature);
+  const want = Buffer.from(expected);
+  return got.length === want.length && timingSafeEqual(got, want);
 }
 
 /**
