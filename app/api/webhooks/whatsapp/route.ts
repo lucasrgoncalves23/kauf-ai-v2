@@ -22,6 +22,8 @@ import {
   updateWaMessageStatus,
   upsertWaConversation,
   findPatientByPhone,
+  hasActiveWaConsent,
+  setWaOptIn,
 } from "../../../lib/db";
 import { logger } from "@/app/lib/logger";
 
@@ -61,6 +63,14 @@ export async function POST(request: NextRequest) {
   for (const msg of messages) {
     try {
       const patient = await findPatientByPhone(msg.from);
+
+      // A patient messaging the clinic is the consent event (LGPD): record
+      // opt-in so outbound replies are not blocked. Never resets an existing
+      // consent date; a revoked opt-in is re-established only by this new
+      // inbound contact.
+      if (patient && !(await hasActiveWaConsent(patient.id))) {
+        await setWaOptIn(patient.id, msg.from, "inbound_message");
+      }
 
       const twentyFourHoursFromNow = new Date(
         Date.now() + 24 * 60 * 60 * 1000
