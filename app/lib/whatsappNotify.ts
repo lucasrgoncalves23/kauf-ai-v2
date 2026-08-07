@@ -10,6 +10,7 @@ import { logger } from "./logger";
 import {
   sendTemplate,
   isWhatsAppConfigured,
+  WaApiError,
 } from "./whatsapp";
 import { getTemplate, type TemplateContext } from "./whatsappTemplates";
 import { hasActiveWaConsent, insertWaMessage } from "./db";
@@ -62,8 +63,9 @@ export async function notifyWhatsAppConsultaFinalizada(
   try {
     await safeSendTemplate(patient, "consulta_resumo", { patient, consulta });
   } catch (error) {
-    logger.warn("WhatsApp notify: consulta_resumo failed", {
+    logger.error("WhatsApp notify: consulta_resumo failed", {
       patientId: patient.id,
+      metaErrorCode: error instanceof WaApiError ? error.code : undefined,
       error: String(error),
     });
   }

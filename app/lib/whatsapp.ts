@@ -83,6 +83,23 @@ export interface WaStatusUpdate {
   errorMessage?: string;
 }
 
+export class WaApiError extends Error {
+  readonly httpStatus: number;
+  /** Meta error code, e.g. 131047 (re-engagement), 132000-range (template). */
+  readonly code: number | undefined;
+
+  constructor(httpStatus: number, apiError: Record<string, unknown>) {
+    const inner = apiError?.error as Record<string, unknown> | undefined;
+    const code = typeof inner?.code === "number" ? inner.code : undefined;
+    super(
+      `WhatsApp API error ${httpStatus}${code ? ` (code ${code})` : ""}: ${JSON.stringify(apiError)}`
+    );
+    this.name = "WaApiError";
+    this.httpStatus = httpStatus;
+    this.code = code;
+  }
+}
+
 function getConfig() {
   const token = process.env.WHATSAPP_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_ID;
@@ -140,9 +157,7 @@ export async function sendTemplate(
       template: req.templateName,
       to: req.to,
     });
-    throw new Error(
-      `WhatsApp API error ${res.status}: ${JSON.stringify(err)}`
-    );
+    throw new WaApiError(res.status, err);
   }
 
   const data = await res.json();

@@ -36,6 +36,15 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max - 3) + "...";
 }
 
+/** Meta rejects template parameters containing newlines, tabs, or 4+ consecutive spaces. */
+function sanitizeParam(text: string, max: number): string {
+  const flat = text
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return truncate(flat, max);
+}
+
 export const TEMPLATES: Record<string, TemplateSpec> = {
   consulta_resumo: {
     name: "consulta_resumo",
@@ -44,8 +53,8 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     buildComponents: (ctx) => {
       const firstName = patientFirstName(ctx.patient);
       const conduta = ctx.consulta?.outputs?.conduta ?? "";
-      const summary = truncate(
-        conduta.split("\n").filter((l) => l.trim()).slice(0, 5).join("\n"),
+      const summary = sanitizeParam(
+        conduta.split("\n").filter((l) => l.trim()).slice(0, 5).join(" "),
         900
       );
       return [
