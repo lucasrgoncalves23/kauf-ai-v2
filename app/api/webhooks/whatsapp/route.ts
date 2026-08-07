@@ -16,7 +16,6 @@ import {
   verifyWebhookChallenge,
   verifyWebhookSignature,
   parseWebhookPayload,
-  markAsRead,
 } from "../../../lib/whatsapp";
 import {
   insertWaMessage,
@@ -85,8 +84,6 @@ export async function POST(request: NextRequest) {
         phone: msg.from,
         status: "received",
       });
-
-      await markAsRead(msg.waMessageId);
 
       if (msg.type === "button" && msg.buttonPayload) {
         await handleButtonReply(msg.from, msg.buttonPayload, patient?.id ?? null);
