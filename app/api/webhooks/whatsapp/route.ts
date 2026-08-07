@@ -128,7 +128,8 @@ export async function POST(request: NextRequest) {
       await updateWaMessageStatus(
         s.waMessageId,
         s.status,
-        s.errorMessage
+        s.errorMessage,
+        s.errorCode
       );
       logger.debug("WhatsApp webhook: status update", {
         waMessageId: s.waMessageId,
