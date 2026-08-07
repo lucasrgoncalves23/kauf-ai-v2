@@ -1,9 +1,12 @@
 /**
  * WhatsApp Send Message API
  *
- * POST — Send a template or freeform WhatsApp message to a patient.
- * Requires clinic PIN auth. Checks LGPD opt-in before sending.
- * Freeform text is only allowed within an active 24h conversation window.
+ * POST — Send a template or freeform WhatsApp message to a patient, or a
+ * freeform text reply to an unlinked phone (inbox thread without a matched
+ * patient record). Requires clinic PIN auth. Checks LGPD opt-in for linked
+ * patients; unlinked replies are allowed only as text inside the 24h window
+ * the patient themselves opened by messaging the clinic.
+ * Send failures return the Meta error code and an actionable pt-BR message.
  */
 
 import { NextResponse } from "next/server";
@@ -13,15 +16,19 @@ import {
   sendText,
   sendDocument,
   isWhatsAppConfigured,
+  WaApiError,
 } from "../../../lib/whatsapp";
+import { waSendFailureMessage } from "../../../lib/whatsappErrors";
 import { getTemplate, type TemplateContext } from "../../../lib/whatsappTemplates";
 import {
   getPatient,
   hasActiveWaConsent,
   getActiveWaConversation,
   insertWaMessage,
+  findPatientByPhone,
 } from "../../../lib/db";
 import { logger } from "@/app/lib/logger";
+import type { PatientRecord } from "../../../types/clinical";
 
 export const runtime = "nodejs";
 
@@ -37,7 +44,8 @@ export async function POST(request: Request) {
   }
 
   let body: {
-    patientId: string;
+    patientId?: string;
+    phone?: string;
     type: "template" | "text" | "document";
     templateName?: string;
     text?: string;
@@ -53,32 +61,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const { patientId, type } = body;
-  if (!patientId || !type) {
+  const { type } = body;
+  if ((!body.patientId && !body.phone) || !type) {
     return NextResponse.json(
-      { error: "Informe patientId e type" },
+      { error: "Informe patientId ou phone, e type" },
       { status: 422 }
     );
   }
 
-  const patient = await getPatient(patientId);
-  if (!patient) {
-    return NextResponse.json({ error: "Paciente não encontrado" }, { status: 404 });
+  let patient: PatientRecord | null = null;
+  let phone: string | undefined;
+
+  if (body.patientId) {
+    patient = await getPatient(body.patientId);
+    if (!patient) {
+      return NextResponse.json({ error: "Paciente não encontrado" }, { status: 404 });
+    }
+    phone = patient.profile.phone?.replace(/\D/g, "");
+    if (!phone) {
+      return NextResponse.json(
+        { error: "Paciente sem número de WhatsApp cadastrado" },
+        { status: 422 }
+      );
+    }
+  } else {
+    phone = String(body.phone).replace(/\D/g, "");
+    if (!phone) {
+      return NextResponse.json({ error: "Número inválido" }, { status: 422 });
+    }
+    patient = await findPatientByPhone(phone);
   }
 
-  const phone = patient.profile.phone?.replace(/\D/g, "");
-  if (!phone) {
+  if (patient) {
+    const consented = await hasActiveWaConsent(patient.id);
+    if (!consented) {
+      return NextResponse.json(
+        { error: "Paciente não autorizou comunicação via WhatsApp (LGPD)" },
+        { status: 403 }
+      );
+    }
+  } else if (type !== "text") {
+    // Unlinked phones: only a text reply inside the patient-opened 24h
+    // window — templates/documents need a patient record.
     return NextResponse.json(
-      { error: "Paciente sem número de WhatsApp cadastrado" },
+      {
+        error:
+          "Número sem paciente vinculado — apenas resposta de texto dentro da janela de 24h.",
+      },
       { status: 422 }
-    );
-  }
-
-  const consented = await hasActiveWaConsent(patientId);
-  if (!consented) {
-    return NextResponse.json(
-      { error: "Paciente não autorizou comunicação via WhatsApp (LGPD)" },
-      { status: 403 }
     );
   }
 
@@ -86,6 +116,12 @@ export async function POST(request: Request) {
     const msgId = `wm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
     if (type === "template") {
+      if (!patient) {
+        return NextResponse.json(
+          { error: "Template requer paciente vinculado" },
+          { status: 422 }
+        );
+      }
       const templateName = body.templateName;
       if (!templateName) {
         return NextResponse.json(
@@ -115,7 +151,7 @@ export async function POST(request: Request) {
 
       await insertWaMessage({
         id: msgId,
-        patientId,
+        patientId: patient.id,
         waMessageId: result.waMessageId,
         direction: "outbound",
         type: "template",
@@ -156,7 +192,7 @@ export async function POST(request: Request) {
 
       await insertWaMessage({
         id: msgId,
-        patientId,
+        patientId: patient?.id ?? null,
         waMessageId: result.waMessageId,
         direction: "outbound",
         type: "text",
@@ -190,7 +226,7 @@ export async function POST(request: Request) {
 
       await insertWaMessage({
         id: msgId,
-        patientId,
+        patientId: patient?.id ?? null,
         waMessageId: result.waMessageId,
         direction: "outbound",
         type: "document",
@@ -214,12 +250,20 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     logger.error("WhatsApp send: failed", {
-      patientId,
+      patientId: patient?.id ?? null,
+      phone,
       type,
+      metaErrorCode: error instanceof WaApiError ? error.code : undefined,
       error: String(error),
     });
+    if (error instanceof WaApiError) {
+      return NextResponse.json(
+        { error: waSendFailureMessage(error.code), code: error.code ?? null },
+        { status: 502 }
+      );
+    }
     return NextResponse.json(
-      { error: "Falha ao enviar mensagem" },
+      { error: waSendFailureMessage(null) },
       { status: 500 }
     );
   }

@@ -195,9 +195,7 @@ export async function sendText(
       status: res.status,
       error: err,
     });
-    throw new Error(
-      `WhatsApp API error ${res.status}: ${JSON.stringify(err)}`
-    );
+    throw new WaApiError(res.status, err);
   }
 
   const data = await res.json();
@@ -235,9 +233,7 @@ export async function sendDocument(
       status: res.status,
       error: err,
     });
-    throw new Error(
-      `WhatsApp API error ${res.status}: ${JSON.stringify(err)}`
-    );
+    throw new WaApiError(res.status, err);
   }
 
   const data = await res.json();
