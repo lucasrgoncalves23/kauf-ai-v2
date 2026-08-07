@@ -63,7 +63,7 @@ export interface WaInboundMessage {
   from: string;
   waMessageId: string;
   timestamp: string;
-  type: "text" | "button" | "interactive" | "image" | "document" | "unknown";
+  type: "text" | "button" | "interactive" | "image" | "document" | "audio" | "unknown";
   text?: string;
   buttonPayload?: string;
   buttonText?: string;
@@ -368,9 +368,10 @@ export function parseWebhookPayload(body: Record<string, unknown>): {
             break;
           }
           case "image":
-          case "document": {
+          case "document":
+          case "audio": {
             const media = m[m.type as string] as Record<string, unknown>;
-            parsed.type = m.type as "image" | "document";
+            parsed.type = m.type as "image" | "document" | "audio";
             parsed.mediaId = media?.id as string;
             parsed.text = media?.caption as string;
             break;

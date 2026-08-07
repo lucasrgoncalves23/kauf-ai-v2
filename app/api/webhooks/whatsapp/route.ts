@@ -83,6 +83,15 @@ export async function POST(request: NextRequest) {
         expiresAt: twentyFourHoursFromNow,
       });
 
+      const mediaMarker =
+        msg.type === "audio"
+          ? "[Áudio recebido]"
+          : msg.type === "image"
+          ? "[Imagem recebida]"
+          : msg.type === "document"
+          ? "[Documento recebido]"
+          : undefined;
+
       const msgId = `wm-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       await insertWaMessage({
         id: msgId,
@@ -90,7 +99,8 @@ export async function POST(request: NextRequest) {
         waMessageId: msg.waMessageId,
         direction: "inbound",
         type: msg.type,
-        body: msg.text ?? msg.buttonText ?? msg.interactiveTitle ?? undefined,
+        body: msg.text ?? msg.buttonText ?? msg.interactiveTitle ?? mediaMarker,
+        mediaId: msg.mediaId,
         phone: msg.from,
         status: "received",
       });
