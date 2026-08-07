@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getConsultas, createConsulta, getPatient } from "../../../../lib/db";
 import { notifyCrmConsultaFinalizada } from "../../../../lib/crm";
+import { notifyWhatsAppConsultaFinalizada } from "../../../../lib/whatsappNotify";
 import { logger } from "@/app/lib/logger";
 import { verifyClinicPin } from "@/app/lib/auth";
 import type { Consulta } from "../../../../types/clinical";
@@ -63,8 +64,11 @@ export async function POST(
 
     const created = await createConsulta(consulta);
 
-    // avisa o CRM (melhor esforço — nunca bloqueia o salvamento)
-    await notifyCrmConsultaFinalizada(patient, created);
+    // avisa CRM + WhatsApp (melhor esforço — nunca bloqueia o salvamento)
+    await Promise.all([
+      notifyCrmConsultaFinalizada(patient, created),
+      notifyWhatsAppConsultaFinalizada(patient, created),
+    ]);
 
     return NextResponse.json({ consulta: created }, { status: 201 });
   } catch (error) {
