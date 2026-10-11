@@ -173,3 +173,21 @@ describe("validateContent", () => {
     expect(() => validateContent(bad, parts, labSeries, "Masculino")).toThrow(/doses/);
   });
 });
+
+describe("mergeMedications note dedupe", () => {
+  it("drops a note that only repeats the receita line", () => {
+    const merged = mergeMedications(
+      [{ slot: "outro", nome: "Ondansetrona 4mg", dose: "se náusea da tirzepatida" }],
+      [{ nome: "Ondansetrona 4mg", observacao: "Se náusea da tirzepatida" }]
+    );
+    expect(merged).toEqual([{ slot: "outro", nome: "Ondansetrona 4mg", dose: "se náusea da tirzepatida" }]);
+  });
+
+  it("keeps a plain-language explanation", () => {
+    const merged = mergeMedications(
+      [{ slot: "outro", nome: "Ondansetrona 4mg", dose: "se náusea da tirzepatida" }],
+      [{ nome: "Ondansetrona", observacao: "Só tome se sentir enjoo por causa da tirzepatida." }]
+    );
+    expect(merged[0].observacao).toBe("Só tome se sentir enjoo por causa da tirzepatida.");
+  });
+});

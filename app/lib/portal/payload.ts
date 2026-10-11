@@ -41,8 +41,9 @@ function sameMedication(a: string, b: string): boolean {
  */
 export function mergeMedications(parsed: ParsedMedication[], ai: PortalContent["medicamentos"]): PortalMedication[] {
   return parsed.map((p) => {
-    const note = ai.find((a) => sameMedication(a.nome, p.nome))?.observacao;
-    const observacao = note ?? p.observacao;
+    const note = ai.find((a) => sameMedication(a.nome, p.nome))?.observacao ?? p.observacao;
+    // A note that only repeats the receita line adds nothing
+    const observacao = note && normalizeForMatch(note) !== normalizeForMatch(p.dose) ? note : undefined;
     return observacao ? { ...p, observacao } : { slot: p.slot, nome: p.nome, dose: p.dose };
   });
 }

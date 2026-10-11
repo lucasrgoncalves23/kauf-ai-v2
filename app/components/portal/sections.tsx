@@ -170,15 +170,20 @@ export function MedicamentosSection({
                     <span className="text-xs font-semibold uppercase tracking-wide">{SLOT_LABELS[slot]}</span>
                   </div>
                   <ul className="divide-y divide-slate-100">
-                    {items.map((m, i) => (
-                      <li key={i} className="flex items-baseline justify-between gap-4 py-2.5">
-                        <div className="min-w-0">
-                          <p className="text-[15px] font-medium text-slate-900">{m.nome}</p>
-                          {m.observacao && <p className="text-sm text-slate-500">{m.observacao}</p>}
-                        </div>
-                        {m.dose && <span className="shrink-0 text-[15px] font-semibold tabular-nums text-brand-700">{m.dose}</span>}
-                      </li>
-                    ))}
+                    {items.map((m, i) => {
+                      // Short doses ("5mg") sit on the right; longer receita instructions wrap under the name
+                      const shortDose = m.dose.length > 0 && m.dose.length <= 18;
+                      return (
+                        <li key={i} className="py-2.5">
+                          <div className="flex items-baseline justify-between gap-4">
+                            <p className="min-w-0 text-[15px] font-medium text-slate-900">{m.nome}</p>
+                            {shortDose && <span className="shrink-0 text-[15px] font-semibold tabular-nums text-brand-700">{m.dose}</span>}
+                          </div>
+                          {!shortDose && m.dose && <p className="mt-0.5 text-[15px] font-semibold leading-snug text-brand-700">{m.dose}</p>}
+                          {m.observacao && <p className="mt-0.5 text-sm leading-snug text-slate-500">{m.observacao}</p>}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               );
