@@ -265,7 +265,10 @@ export function useCopilotChat({
 
       if (!touched.length && !streamErr && !raw.includes(COMMAND_OPEN)) {
         const actionWords = /\b(adicionei|alterei|removi|criei|ajustei|tirei|inseri|troquei|montei|atualizei|coloquei)\b/i;
-        if (actionWords.test(text)) {
+        // A reply that ends by asking for confirmation is a proposal, not a
+        // claimed edit — it may describe the plan in past tense ("montei...").
+        const asksConfirmation = /\?\s*$/.test(text.trim());
+        if (actionWords.test(text) && !asksConfirmation) {
           failures.push("resposta indica alteração mas nenhum comando foi gerado — peça novamente");
         }
       }
