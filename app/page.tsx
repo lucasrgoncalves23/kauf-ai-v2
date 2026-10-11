@@ -339,8 +339,11 @@ export default function Home() {
     const text = inputs.anamnese;
     if (!text) return;
     const demographics = extractDemographics(text);
+    const nomeMatch = text.match(/^Nome:\s*(.+)$/m);
+    const nomeTrimmed = nomeMatch?.[1]?.trim();
     setPatientProfile(prev => ({
       ...prev,
+      name: nomeTrimmed || prev.name,
       age: demographics.age?.value?.toString() || prev.age,
       // One-time convenience pre-fill only — once set (manually or by a prior
       // extraction), never silently overwritten by a stray regex match
