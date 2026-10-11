@@ -497,3 +497,56 @@ ${JSON.stringify(context?.inputs || {})}`;
 
   return { rules: CHAT_SYSTEM_RULES, context: dynamicContext };
 }
+
+// ---------- Lab trend interpretation ----------
+
+export type TrendSeriesInput = {
+  label: string;
+  unit: string;
+  ref: string;
+  points: { label: string; value: number }[];
+};
+
+export function buildTrendInterpretationPrompt(input: {
+  series: TrendSeriesInput[];
+  patientSex?: string;
+  patientAge?: string;
+  phase?: string;
+}): { system: string; user: string } {
+  const system = `Você é ${PERSONA}. ${AUTHORITY}
+
+TAREFA: interpretar a evolução longitudinal dos marcadores laboratoriais e de composição corporal de um paciente, para apoiar a decisão do médico.
+
+ESTRUTURA DA RESPOSTA (títulos em texto puro, em maiúsculas):
+VISÃO GERAL: 2-3 frases sobre a trajetória global.
+MELHORAS: marcadores que evoluíram favoravelmente, com valores de/para.
+PONTOS DE ATENÇÃO: marcadores fora da faixa ou com tendência adversa, com valores e a provável relevância clínica.
+CORRELAÇÕES: relações fisiológicas entre marcadores (ex.: insulina, HOMA-IR e gordura corporal), quando os dados sustentarem.
+SUGESTÕES PARA O PRÓXIMO RETORNO: exames a repetir ou acrescentar e o que monitorar.
+
+REGRAS:
+- Use apenas os valores fornecidos; nunca invente dados ou datas
+- Com um único ponto, descreva o valor isolado e diga que não há tendência
+- As faixas de referência são laboratoriais genéricas; considere sexo e idade ao interpretar
+- Linguagem clínica objetiva, sem emojis, sem metáforas, em português do Brasil
+- Seja conciso: no máximo 350 palavras
+${NO_MARKDOWN_RULES}`;
+
+  const header = [
+    input.patientSex ? `Sexo: ${input.patientSex}` : null,
+    input.patientAge ? `Idade: ${input.patientAge}` : null,
+    input.phase ? `Fase clínica atual (motor): ${input.phase}` : null,
+  ].filter(Boolean).join("\n");
+
+  const body = input.series
+    .map((s) => {
+      const unit = s.unit ? ` ${s.unit}` : "";
+      const pts = s.points.map((p) => `${p.label}: ${p.value}${unit}`).join(" | ");
+      return `${s.label}${s.ref ? ` (ref ${s.ref})` : ""}: ${pts}`;
+    })
+    .join("\n");
+
+  const user = `${header ? `${header}\n\n` : ""}EVOLUÇÃO DOS MARCADORES (ordem cronológica; "Atual" = dados ainda não salvos da consulta em andamento):\n${body}`;
+
+  return { system, user };
+}

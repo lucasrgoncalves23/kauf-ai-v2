@@ -607,6 +607,9 @@ export default function Home() {
               currentLabText={inputs.laboratoriais}
               currentInputs={inputs}
               patientName={patientProfile.name}
+              patientSex={patientProfile.sex}
+              patientAge={patientProfile.age}
+              phase={engineStatus?.phase}
             />
             <ConsultaCompareModal
               isOpen={showCompare}
