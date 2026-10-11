@@ -128,6 +128,9 @@ export function assemblePayload(input: {
   const schedule = (texto: string | undefined, introducao: string | undefined) =>
     texto ? { introducao, texto, dias: parseDays(texto) } : undefined;
 
+  // The snapshot must only ever carry the verified medication list, never the raw AI one
+  const medicamentos = mergeMedications(parts.parsedMedications, content.medicamentos);
+
   return {
     version: 1,
     publishedAt: input.publishedAt,
@@ -135,8 +138,8 @@ export function assemblePayload(input: {
     patientFirstName: context.firstName,
     consultaDate: context.consulta.timestamp,
     clinic: { doctor: CLINIC.doctor, crm: CLINIC.crm, name: CLINIC.name, contactLine },
-    content,
-    medicamentos: mergeMedications(parts.parsedMedications, content.medicamentos),
+    content: { ...content, medicamentos },
+    medicamentos,
     schedules: {
       dieta: schedule(parts.dieta, content.dieta?.introducao),
       treino: schedule(parts.treino, content.treino?.introducao),
