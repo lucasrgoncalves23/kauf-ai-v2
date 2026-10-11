@@ -4,7 +4,7 @@ import { verifyClinicPin } from "@/app/lib/auth";
 import { cachedSystem, getAnthropicClient, MODEL } from "@/app/lib/anthropic";
 import { buildPortalContentPrompt } from "@/app/lib/prompts";
 import { logger } from "@/app/lib/logger";
-import { portalContentJsonSchema, portalContentSchema } from "@/app/lib/portal/schema";
+import { parsePortalContent, portalContentJsonSchema } from "@/app/lib/portal/schema";
 import {
   assemblePayload,
   checkRules,
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
       throw new PortalPublishError("A versão do paciente ficou longa demais e foi cortada. Gere novamente.", 422);
     }
     const toolUse = message.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-    const parsed = portalContentSchema.safeParse(toolUse?.input);
+    const parsed = parsePortalContent(toolUse?.input);
     if (!parsed.success) {
       logger.warn("Portal content failed schema validation", { issues: parsed.error.issues.slice(0, 5) });
       throw new PortalPublishError("A IA devolveu um formato inesperado. Gere novamente.", 422);

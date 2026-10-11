@@ -265,7 +265,7 @@ export function PublishPortalModal({
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
               <p className="mt-4 text-sm font-medium text-slate-700 dark:text-slate-200">Traduzindo a consulta para a linguagem do paciente…</p>
-              <p className="mt-1 text-xs text-slate-400">Isso leva cerca de 1 minuto.</p>
+              <p className="mt-1 text-xs text-slate-400">Isso leva de 1 a 2 minutos.</p>
             </div>
           )}
 

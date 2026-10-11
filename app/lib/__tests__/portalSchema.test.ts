@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { portalContentSchema, portalContentJsonSchema, flattenContentText } from "../portal/schema";
+import { portalContentSchema, portalContentJsonSchema, flattenContentText, parsePortalContent } from "../portal/schema";
 
 export const GOLDEN_CONTENT = {
   resumo: {
@@ -62,5 +62,55 @@ describe("portal content schema", () => {
     expect(text).toContain("Com a primeira refeição.");
     expect(text).toContain("Tontura forte ao levantar");
     expect(text).toContain("Vamos conversar sobre isso");
+  });
+});
+
+describe("parsePortalContent", () => {
+  it("repairs the shape slips seen in real output: omitted acoes on waiting modules", () => {
+    const raw = {
+      ...GOLDEN_CONTENT,
+      modulos: [
+        GOLDEN_CONTENT.modulos[0],
+        { id: "hormonal", titulo: "Hormônios", ativo: false, maisAdiante: "Mais adiante." },
+        { id: "peptideos", titulo: "Peptídeos", maisAdiante: "Depois." },
+      ],
+    };
+    const parsed = parsePortalContent(raw);
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.modulos[1].acoes).toEqual([]);
+    expect(parsed.data.modulos[2]).toMatchObject({ ativo: false, acoes: [] });
+  });
+
+  it("trims over-long text, caps lists, turns nulls into omissions and drops unknown enum items", () => {
+    const parsed = parsePortalContent({
+      ...GOLDEN_CONTENT,
+      resumo: { texto: "x".repeat(2000), prioridades: ["a1", "b2", "c3", "d4", "e5", null] },
+      modulos: [
+        { id: "sono", titulo: "Sono", ativo: true, acoes: ["1a", "2a", "3a", "4a", "5a", "6a", "7a"], porque: null },
+        { id: "cirurgia", titulo: "X", ativo: true, acoes: [] },
+      ],
+      medicamentos: [{ nome: "Vitamina D3", dose: "10.000 UI", slot: "madrugada", observacao: null }],
+      exames: [
+        { marcador: "glicose", nomePopular: "Açúcar", explicacao: "Mostra o açúcar em jejum.", situacao: "ok" },
+        { marcador: "cortisol", nomePopular: "Cortisol", explicacao: "Hormônio do estresse.", situacao: "bem" },
+      ],
+      dieta: null,
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.resumo.texto).toHaveLength(1200);
+    expect(parsed.data.resumo.prioridades).toHaveLength(4);
+    expect(parsed.data.modulos).toHaveLength(1);
+    expect(parsed.data.modulos[0].acoes).toHaveLength(6);
+    expect(parsed.data.modulos[0].porque).toBeUndefined();
+    expect(parsed.data.medicamentos[0]).toEqual({ nome: "Vitamina D3", dose: "10.000 UI", slot: "outro" });
+    expect(parsed.data.exames).toEqual([{ marcador: "glicose", nomePopular: "Açúcar", explicacao: "Mostra o açúcar em jejum.", situacao: "atencao" }]);
+    expect(parsed.data.dieta).toBeUndefined();
+  });
+
+  it("still rejects output with no usable summary", () => {
+    expect(parsePortalContent({ ...GOLDEN_CONTENT, resumo: { texto: "", prioridades: [] } }).success).toBe(false);
+    expect(parsePortalContent(null).success).toBe(false);
   });
 });

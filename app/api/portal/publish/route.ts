@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyClinicPin } from "@/app/lib/auth";
 import { logger } from "@/app/lib/logger";
-import { portalContentSchema } from "@/app/lib/portal/schema";
+import { parsePortalContent } from "@/app/lib/portal/schema";
 import { encryptToken, hashCpf, hashToken, isPortalConfigured, newToken } from "@/app/lib/portal/crypto";
 import {
   assemblePayload,
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     if (body.doctorConfirmed !== true) {
       return NextResponse.json({ error: "Confirme que o paciente solicitou o acesso digital." }, { status: 400 });
     }
-    const parsed = portalContentSchema.safeParse(body.content);
+    const parsed = parsePortalContent(body.content);
     if (!parsed.success) {
       return NextResponse.json({ error: "Conteúdo inválido. Gere a prévia novamente." }, { status: 422 });
     }
