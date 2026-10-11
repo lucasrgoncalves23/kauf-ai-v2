@@ -270,7 +270,7 @@ export function buildLabSeries(
 
 export type MarkerStatus = "normal" | "warning" | "critical";
 
-export function markerStatus(value: number, marker: LabMarkerSpec): MarkerStatus {
+export function markerStatus(value: number, marker: Pick<LabMarkerSpec, "refMin" | "refMax">): MarkerStatus {
   const { refMin, refMax } = marker;
   if (refMin !== undefined && value < refMin) {
     return value < refMin * 0.7 ? "critical" : "warning";
@@ -282,7 +282,7 @@ export function markerStatus(value: number, marker: LabMarkerSpec): MarkerStatus
 }
 
 /** Human-readable reference range, e.g. "70–99 mg/dL" or "< 150 mg/dL". */
-export function refRangeText(marker: LabMarkerSpec): string {
+export function refRangeText(marker: Pick<LabMarkerSpec, "unit" | "refMin" | "refMax">): string {
   const unit = marker.unit ? ` ${marker.unit}` : "";
   if (marker.refMin !== undefined && marker.refMax !== undefined) {
     return `${marker.refMin}–${marker.refMax}${unit}`;

@@ -128,6 +128,17 @@ Patients must be opted in via `/api/whatsapp/opt-in` before any automated messag
 
 ---
 
+## Patient Portal (`/portal`)
+
+Read-only, plain-language version of a consultation that the patient opens on their phone via a personal link. Isolated from the doctor app: nothing under `app/portal/**` or `app/api/portal/open` uses the clinic PIN, and the portal reads only from the `portal_publications` snapshot table, never from live `patients`/`consultas`.
+
+- **Link**: `https://<host>/portal#<token>` — the token lives in the URL fragment so it never reaches server logs. 32 random bytes, stored only as an HMAC (`token_hash`) plus AES-GCM-encrypted (`token_enc`) so the doctor can re-copy it. Re-openable until `expires_at` (90 days); CPF required on every open.
+- **Access** (`POST /api/portal/open {token, cpf}`): CPF compared as HMAC; wrong CPF → generic 401 and `failed_attempts++` with a lockout ladder (5 → 15 min, 10 → 24 h, 20 → permanent `locked`); expired/revoked/superseded/locked → 410 with a specific message. Trashed patients are treated as not found. Every open/failed attempt is written to `portal_access_log` (IP as HMAC). The page keeps the payload in memory only — reload re-prompts the CPF.
+- **Publishing** (doctor, PIN): `POST /api/portal/preview {patientId, consultaId}` rebuilds everything from the saved consulta, calls the model with a forced tool (`buildPortalContentPrompt` in prompts.ts → `portalContentSchema` in [schema.ts](app/lib/portal/schema.ts)) and validates: zod shape, every dose must appear verbatim in the receita/conduta, every lab marker must exist in the series, `checkClinicalRules` on sources and on the AI text. Medications come from the receita's `CRONOGRAMA DIÁRIO` (deterministic, [extract.ts](app/lib/portal/extract.ts)); the AI only adds the per-item note. Diet/training 30-day blocks and the full receita are shown verbatim. `POST /api/portal/publish` re-validates and stores the snapshot (one active publication per patient; previous ones become `superseded`). Also `GET /api/portal/publications?patientId=`, `POST .../[id]/revoke` (erases the payload), `POST .../[id]/reissue` (new token, same content).
+- **Doctor UI**: [PatientPortalCard.tsx](app/components/PatientPortalCard.tsx) (sidebar; status, copy link, QR, new link, revoke) and [PublishPortalModal.tsx](app/components/PublishPortalModal.tsx) (prechecks → generate → phone-sized iframe preview of `/portal?preview=1` fed via `postMessage` → link + QR). Publishing requires the consulta to be saved with the on-screen texts.
+- **Env**: `PORTAL_SECRET` (≥32 chars; keys derived with HKDF — publishing and opening fail closed without it) and `CLINIC_CONTACT_LINE` (LGPD controller contact shown to patients; required to publish). Tables are created lazily by `ensurePortalTables()` and by `POST /api/db/init`.
+- Security headers for `/portal` and `/api/portal/*` live in [next.config.ts](next.config.ts); `app/robots.ts` disallows `/portal` and `/api/`.
+
 ## Style Constraints (prompts)
 
 - Objective, clinical language; no emojis, no metaphors

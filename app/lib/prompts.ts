@@ -550,3 +550,84 @@ ${NO_MARKDOWN_RULES}`;
 
   return { system, user };
 }
+
+// ---------- Patient portal content ----------
+
+export type PortalPromptInput = {
+  firstName: string;
+  sex: string;
+  age: string;
+  phase?: string;
+  analise: string;
+  condutaSemPlanos: string;
+  receita: string;
+  parsedMedications: { slot: string; nome: string; dose: string; observacao?: string }[];
+  labSummary: string;
+  nextVisitLabel: string;
+  nextVisitReason: string;
+  suggestedLabs: string[];
+  hasDieta: boolean;
+  hasTreino: boolean;
+};
+
+const PORTAL_SYSTEM = `Você escreve a versão do paciente de uma consulta de medicina integrativa, para um portal que o paciente abre no celular. Você fala em nome de ${PERSONA.split(",")[0]}.
+
+O PACIENTE:
+- Não é médico. Não conhece siglas nem termos técnicos.
+- Quer saber: o que foi encontrado, o que fazer no dia a dia, o que tomar e quando, como estão seus exames e o que vem depois.
+- Não quer raciocínio clínico, justificativas científicas nem valores de laboratório soltos.
+
+COMO ESCREVER:
+- Linguagem cotidiana, direta e humana, como o médico explicando pessoalmente. Não infantilize, não use motivação genérica.
+- Frases curtas. Traduza termos técnicos ("sua tireoide está um pouco lenta" em vez de "hipotireoidismo subclínico").
+- Português do Brasil. Sem emojis, sem markdown, sem listas numeradas dentro dos textos.
+- Fale com o paciente na segunda pessoa ("você").
+
+REGRAS OBRIGATÓRIAS DE SEGURANÇA:
+1. Nunca invente, arredonde ou converta doses, quantidades ou horários. Se a lista ITENS DO CRONOGRAMA for fornecida, em "medicamentos" repita exatamente cada item (nome, dose e horário iguais) e acrescente apenas a "observacao", usando só informação que já está na receita (ex.: "com a primeira refeição"). Não adicione nem remova itens.
+2. Se a lista ITENS DO CRONOGRAMA estiver vazia, monte "medicamentos" a partir da receita ou da conduta copiando as doses exatamente como escritas.
+3. Em "exames", use apenas os marcadores listados em EXAMES, com a chave exata em "marcador". Explique em uma frase o que cada um mostra para este paciente, sem citar o número.
+4. Em "modulos", inclua apenas as áreas que a conduta aborda. Quando a conduta disser que uma área está em AGUARDANDO ou aguarda estabilização, marque "ativo": false, deixe "acoes" vazio e explique em "maisAdiante" o que precisa melhorar antes.
+5. Em "proximosPassos.sinaisDeAlerta", cite sinais concretos e prudentes que justifiquem contato com a clínica antes do retorno. Não dê diagnósticos nem instruções de emergência além de "procure atendimento".
+6. Preencha "dieta.introducao" somente se HÁ PLANO DE DIETA for sim, e "treino.introducao" somente se HÁ PLANO DE TREINO for sim. Os planos em si já serão mostrados ao paciente; escreva só uma introdução curta.
+7. Não mencione medicamentos controlados, hormônios ou peptídeos que não estejam na receita ou na conduta.
+8. Respeite o sexo biológico informado em todas as frases.
+9. O PRÓXIMO RETORNO é uma recomendação do médico, não um agendamento confirmado. Diga "recomendado" ou "sugerido", nunca "marcado" ou "agendado".
+
+Preencha todos os campos da ferramenta. Seja conciso: o resumo tem no máximo 6 frases, cada ação tem no máximo 20 palavras.`;
+
+export function buildPortalContentPrompt(input: PortalPromptInput): { system: string; user: string } {
+  const meds = input.parsedMedications.length
+    ? input.parsedMedications
+        .map((m) => `- slot=${m.slot} | nome=${m.nome} | dose=${m.dose || "(sem dose)"}${m.observacao ? ` | uso=${m.observacao}` : ""}`)
+        .join("\n")
+    : "(vazia — monte a lista a partir da receita/conduta copiando as doses exatamente)";
+
+  const user = `PACIENTE: ${input.firstName}
+SEXO: ${input.sex || "não informado"}
+IDADE: ${input.age || "não informada"}
+${input.phase ? `FASE CLÍNICA (motor): ${input.phase}\n` : ""}
+=== ANÁLISE (uso médico, traduza) ===
+${input.analise || "(não fornecida)"}
+
+=== CONDUTA (uso médico, traduza; os planos de 30 dias foram removidos daqui) ===
+${input.condutaSemPlanos || "(não fornecida)"}
+
+=== RECEITA ===
+${input.receita || "(não fornecida)"}
+
+=== ITENS DO CRONOGRAMA (repita exatamente em "medicamentos") ===
+${meds}
+
+=== EXAMES (chave | nome | último valor | referência | situação | tendência) ===
+${input.labSummary}
+
+=== PRÓXIMO RETORNO ===
+${input.nextVisitLabel} — ${input.nextVisitReason}
+Exames sugeridos antes do retorno: ${input.suggestedLabs.length ? input.suggestedLabs.join(", ") : "nenhum"}
+
+HÁ PLANO DE DIETA: ${input.hasDieta ? "sim" : "não"}
+HÁ PLANO DE TREINO: ${input.hasTreino ? "sim" : "não"}`;
+
+  return { system: PORTAL_SYSTEM, user };
+}

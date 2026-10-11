@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { initDatabase, checkDatabaseConnection } from "../../../lib/db";
+import { ensurePortalTables } from "@/app/lib/portalDb";
 import { logger } from "@/app/lib/logger";
 import { verifyClinicPin } from "@/app/lib/auth";
 
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
 
     // Initialize tables
     await initDatabase();
+    await ensurePortalTables();
 
     return NextResponse.json({
       success: true,

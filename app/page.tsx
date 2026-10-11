@@ -29,6 +29,7 @@ import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-clien
 // --- COMPONENT IMPORTS ---
 import { TrendingUp, Columns3 } from "lucide-react";
 import { SmartFollowUp } from "./components/SmartFollowUp";
+import { PatientPortalCard } from "./components/PatientPortalCard";
 import { Toast, ConfirmDialog } from "./components/ui";
 import { TrashBanner } from "./components/TrashBanner";
 import { DataBox } from "./components/DataBox";
@@ -454,6 +455,15 @@ export default function Home() {
                   consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
                   currentInputs={inputs}
                   engineStatus={engineStatus}
+                />
+                <PatientPortalCard
+                  patientId={currentPatientId}
+                  profile={patientProfile}
+                  outputs={outputs}
+                  consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+                  onSaveConsulta={handleSaveConsulta}
+                  isSavingConsulta={isSavingConsulta}
+                  setToast={setToast}
                 />
               </div>
             </aside>

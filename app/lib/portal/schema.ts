@@ -1,0 +1,141 @@
+import { z } from "zod";
+import { LAB_MARKERS, type LabMarkerKey } from "../labTrends";
+
+export const MODULE_IDS = [
+  "sono",
+  "nutricao",
+  "exercicio",
+  "suplementacao",
+  "manipulados",
+  "soroterapia",
+  "glp1",
+  "hormonal",
+  "peptideos",
+] as const;
+export type ModuleId = (typeof MODULE_IDS)[number];
+
+export const MODULE_LABELS: Record<ModuleId, string> = {
+  sono: "Sono",
+  nutricao: "Alimentação",
+  exercicio: "Exercício",
+  suplementacao: "Suplementos",
+  manipulados: "Fórmulas manipuladas",
+  soroterapia: "Soroterapia",
+  glp1: "Medicação para o metabolismo",
+  hormonal: "Hormônios",
+  peptideos: "Peptídeos",
+};
+
+export const SLOTS = [
+  "ao_acordar",
+  "cafe_da_manha",
+  "almoco",
+  "pre_treino",
+  "jantar",
+  "ao_deitar",
+  "outro",
+] as const;
+export type Slot = (typeof SLOTS)[number];
+
+export const SLOT_LABELS: Record<Slot, string> = {
+  ao_acordar: "Ao acordar",
+  cafe_da_manha: "Café da manhã",
+  almoco: "Almoço",
+  pre_treino: "Antes do treino",
+  jantar: "Jantar",
+  ao_deitar: "Ao deitar",
+  outro: "Outros horários",
+};
+
+const MARKER_KEYS = LAB_MARKERS.map((m) => m.key) as [LabMarkerKey, ...LabMarkerKey[]];
+
+export const portalContentSchema = z.object({
+  resumo: z.object({
+    texto: z
+      .string()
+      .min(20)
+      .max(1200)
+      .describe("3 a 6 frases em linguagem simples: o que está indo bem e o que precisa de atenção. Sem números de exame."),
+    prioridades: z
+      .array(z.string().min(2).max(120))
+      .min(1)
+      .max(4)
+      .describe("2 a 4 prioridades curtas para o período, em frases de ação."),
+  }),
+  modulos: z
+    .array(
+      z.object({
+        id: z.enum(MODULE_IDS),
+        titulo: z.string().min(2).max(60).describe("Nome simples da área, sem jargão."),
+        ativo: z.boolean().describe("false quando a conduta diz que o módulo aguarda estabilização."),
+        acoes: z
+          .array(z.string().min(2).max(200))
+          .max(6)
+          .describe("O que o paciente faz no dia a dia nesta área. Vazio se o módulo não está ativo."),
+        porque: z.string().max(240).optional().describe("Uma frase sobre por que isso importa para este paciente."),
+        maisAdiante: z
+          .string()
+          .max(240)
+          .optional()
+          .describe("Se não está ativo: o que precisa melhorar antes, em linguagem simples."),
+      })
+    )
+    .max(9),
+  medicamentos: z
+    .array(
+      z.object({
+        nome: z.string().min(1).max(120),
+        dose: z.string().max(80),
+        slot: z.enum(SLOTS),
+        observacao: z
+          .string()
+          .max(200)
+          .optional()
+          .describe("Como tomar, só com informação que já está na receita (ex.: com a primeira refeição)."),
+      })
+    )
+    .max(60),
+  exames: z
+    .array(
+      z.object({
+        marcador: z.enum(MARKER_KEYS),
+        nomePopular: z.string().min(2).max(60).describe("Nome que o paciente reconhece, ex.: 'Açúcar no sangue'."),
+        explicacao: z.string().min(5).max(300).describe("Uma frase: o que este exame mostra para este paciente."),
+        situacao: z.enum(["bem", "atencao", "cuidado"]),
+      })
+    )
+    .max(30),
+  proximosPassos: z.object({
+    examesAntes: z.array(z.string().max(120)).max(12).describe("Exames a fazer antes do próximo retorno, com nomes populares."),
+    sinaisDeAlerta: z
+      .array(z.string().max(160))
+      .max(8)
+      .describe("Sinais que justificam contato com a clínica antes do retorno."),
+    observacoes: z.string().max(400).optional(),
+  }),
+  dieta: z.object({ introducao: z.string().max(400) }).optional(),
+  treino: z.object({ introducao: z.string().max(400) }).optional(),
+});
+
+export type PortalContent = z.infer<typeof portalContentSchema>;
+
+export function portalContentJsonSchema(): Record<string, unknown> {
+  const { $schema: _omit, ...schema } = z.toJSONSchema(portalContentSchema) as Record<string, unknown>;
+  void _omit;
+  return schema;
+}
+
+export function flattenContentText(content: PortalContent): string {
+  const parts: string[] = [content.resumo.texto, ...content.resumo.prioridades];
+  for (const m of content.modulos) parts.push(m.titulo, ...m.acoes, m.porque ?? "", m.maisAdiante ?? "");
+  for (const m of content.medicamentos) parts.push(m.nome, m.dose, m.observacao ?? "");
+  for (const e of content.exames) parts.push(e.nomePopular, e.explicacao);
+  parts.push(
+    ...content.proximosPassos.examesAntes,
+    ...content.proximosPassos.sinaisDeAlerta,
+    content.proximosPassos.observacoes ?? "",
+    content.dieta?.introducao ?? "",
+    content.treino?.introducao ?? ""
+  );
+  return parts.filter(Boolean).join("\n");
+}

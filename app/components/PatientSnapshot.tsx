@@ -2,6 +2,7 @@
 
 import type { PatientProfile } from "../types/clinical";
 import { isValidSex } from "../lib/extraction";
+import { isValidCpf } from "../lib/cpf";
 import { SectionLabel } from "./ui/SectionLabel";
 
 type PatientSnapshotProps = {
@@ -70,6 +71,9 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
               value={profile.cpf}
               onChange={(e) => onProfileChange({ ...profile, cpf: e.target.value })}
             />
+            {profile.cpf.trim() && !isValidCpf(profile.cpf) && (
+              <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">CPF inválido</p>
+            )}
           </div>
         </div>
         <div className="group">
