@@ -2,8 +2,8 @@
 // Extraction follows the same regex conventions as extraction.ts
 // (Portuguese lab reports, decimal comma or dot).
 
-import type { Consulta } from "../types/clinical";
-export type { ClinicalData } from "../types/clinical";
+import type { Consulta, ClinicalData } from "../types/clinical";
+export type { ClinicalData };
 
 export type LabMarkerKey =
   | "glicose"
