@@ -93,26 +93,10 @@ export function useSessionPersistence(
         const { patients: loadedPatients, fromDatabase } = await fetchAllPatients();
         setUsingDatabase(fromDatabase);
 
-        const savedCurrentId = localStorage.getItem("kai-current-patient");
-
         if (Object.keys(loadedPatients).length > 0) {
-          // Patients found - use them
           setPatients(loadedPatients);
-
-          // Load current patient or first available
-          const patientIds = Object.keys(loadedPatients);
-          const targetId =
-            savedCurrentId && loadedPatients[savedCurrentId] ? savedCurrentId : patientIds[0];
-
-          if (targetId && loadedPatients[targetId]) {
-            const patient = loadedPatients[targetId];
-            setCurrentPatientId(targetId);
-            setInputs(patient.inputs);
-            setOutputs(patient.outputs);
-            setPatientProfile(patient.profile);
-            setChatMessages(patient.chatMessages || []);
-            setEngineStatus(patient.engineStatus);
-          }
+          // Open on a blank draft; it is only added to the list once the doctor types something
+          setCurrentPatientId(createBlankPatient().id);
         } else {
           // No patients found - check for old format migration
           const oldSession = localStorage.getItem("kai-session");
@@ -146,7 +130,6 @@ export function useSessionPersistence(
 
             // Save to localStorage (will also try database in save effect)
             localStorage.setItem("kai-patients", JSON.stringify(newPatients));
-            localStorage.setItem("kai-current-patient", migratedPatient.id);
           } else {
             // No existing data - create first patient
             const firstPatient = createBlankPatient("Novo Paciente");
@@ -170,7 +153,6 @@ export function useSessionPersistence(
       try {
         const updatedPatients = { ...patients, [updatedPatient.id]: updatedPatient };
         localStorage.setItem("kai-patients", JSON.stringify(updatedPatients));
-        localStorage.setItem("kai-current-patient", updatedPatient.id);
 
         // Also save in old format for backwards compatibility
         localStorage.setItem(
@@ -205,6 +187,14 @@ export function useSessionPersistence(
   // --- Save current patient on change (debounced) ---
   useEffect(() => {
     if (!isHydrated || !currentPatientId) return;
+
+    const isUnsavedBlankDraft =
+      !patients[currentPatientId] &&
+      Object.values(inputs).every((v) => !v?.trim()) &&
+      Object.values(outputs).every((v) => !v?.trim()) &&
+      Object.values(patientProfile).every((v) => !v?.toString().trim()) &&
+      chatMessages.length === 0;
+    if (isUnsavedBlankDraft) return;
 
     // Clear previous timeout
     if (saveTimeoutRef.current) {
@@ -258,7 +248,6 @@ export function useSessionPersistence(
       try {
         const updatedPatients = { ...patientsRef.current, [pending.id]: pending };
         localStorage.setItem("kai-patients", JSON.stringify(updatedPatients));
-        localStorage.setItem("kai-current-patient", pending.id);
       } catch {
         /* ignore */
       }
