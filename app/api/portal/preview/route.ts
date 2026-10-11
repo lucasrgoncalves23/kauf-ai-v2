@@ -89,18 +89,18 @@ export async function POST(req: Request) {
       throw new PortalPublishError("A IA devolveu um formato inesperado. Gere novamente.", 422);
     }
 
-    validateContent(parsed.data, parts, context.labSeries, context.sex);
+    const content = validateContent(parsed.data, parts, context.labSeries, context.sex);
 
     const now = new Date();
     const payload = assemblePayload({
       context,
       parts,
-      content: parsed.data,
+      content,
       publishedAt: now.toISOString(),
       expiresAt: expiryFrom(now),
     });
 
-    return NextResponse.json({ content: parsed.data, payload }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ content, payload }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     if (err instanceof PortalPublishError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

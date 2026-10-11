@@ -1,25 +1,22 @@
 import { stripAccents } from "./extract";
-import type { PortalContent } from "./schema";
 
 export function normalizeForMatch(s: string): string {
   return stripAccents(s).toLowerCase().replace(/\s+/g, "");
 }
 
-export function dosesMatchSource(
-  items: { nome: string; dose: string }[],
-  sourceText: string
-): { ok: boolean; missing: { nome: string; dose: string }[] } {
-  const haystack = normalizeForMatch(sourceText);
-  const missing = items.filter((i) => i.dose && !haystack.includes(normalizeForMatch(i.dose)));
-  return { ok: missing.length === 0, missing };
-}
+// Number + dosage unit, e.g. "2,5mg", "10.000 UI", "200 mcg", "2 cápsulas"
+const DOSE_TOKEN =
+  /(\d+(?:[.,]\d+)*)\s*(mcg|µg|ug|mg|ui|iu|ml|g|c[aá]psulas?|comprimidos?|gotas?|ampolas?|unidades?)(?![a-zà-ú])/gi;
 
-export function markersExist(
-  exames: PortalContent["exames"],
-  knownKeys: Set<string>
-): { ok: boolean; unknown: string[] } {
-  const unknown = exames.map((e) => e.marcador).filter((k) => !knownKeys.has(k));
-  return { ok: unknown.length === 0, unknown };
+/** Dose-like mentions in AI-written text that do not appear verbatim in the doctor's documents. */
+export function unverifiedDoseMentions(aiText: string, sourceText: string): string[] {
+  const haystack = normalizeForMatch(sourceText);
+  const found = new Set<string>();
+  for (const m of aiText.matchAll(DOSE_TOKEN)) {
+    const token = `${m[1]}${m[2]}`;
+    if (!haystack.includes(normalizeForMatch(token))) found.add(m[0].trim());
+  }
+  return [...found];
 }
 
 // Lockout ladder on wrong-CPF attempts

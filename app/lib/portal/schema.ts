@@ -81,17 +81,16 @@ export const portalContentSchema = z.object({
       })
     )
     .max(9),
+  // Notes only: names, doses and times shown to the patient always come from the receita parser
   medicamentos: z
     .array(
       z.object({
-        nome: z.string().min(1).max(120),
-        dose: z.string().max(200),
-        slot: z.enum(SLOTS),
+        nome: z.string().min(1).max(120).describe("Nome exatamente como aparece em ITENS DA RECEITA."),
         observacao: z
           .string()
           .max(200)
           .optional()
-          .describe("Como tomar, só com informação que já está na receita (ex.: com a primeira refeição)."),
+          .describe("Como tomar, só com informação que já está na receita (ex.: com a primeira refeição). Sem doses nem quantidades."),
       })
     )
     .max(60),
@@ -174,7 +173,7 @@ export function normalizePortalContent(raw: unknown): unknown {
       const med = obj(m);
       const nome = str(med.nome, 120);
       if (!nome) return [];
-      return [{ nome, dose: str(med.dose, 200), slot: oneOf(med.slot, SLOTS) ?? "outro", observacao: optStr(med.observacao, 200) }];
+      return [{ nome, observacao: optStr(med.observacao, 200) }];
     }),
     exames: arr(r.exames, 30).flatMap((e) => {
       const ex = obj(e);
@@ -201,7 +200,7 @@ export function parsePortalContent(raw: unknown) {
 export function flattenContentText(content: PortalContent): string {
   const parts: string[] = [content.resumo.texto, ...content.resumo.prioridades];
   for (const m of content.modulos) parts.push(m.titulo, ...m.acoes, m.porque ?? "", m.maisAdiante ?? "");
-  for (const m of content.medicamentos) parts.push(m.nome, m.dose, m.observacao ?? "");
+  for (const m of content.medicamentos) parts.push(m.observacao ?? "");
   for (const e of content.exames) parts.push(e.nomePopular, e.explicacao);
   parts.push(
     ...content.proximosPassos.examesAntes,

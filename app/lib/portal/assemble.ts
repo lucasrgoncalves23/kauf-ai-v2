@@ -8,7 +8,7 @@ import { isValidCpf, normalizeCpf } from "../cpf";
 import { CLINIC, getClinicContactLine } from "../clinic";
 import { extractThirtyDayBlocks, parseCronograma, parseDays, parseReceitaItems, type ParsedMedication } from "./extract";
 import { flattenContentText, type PortalContent } from "./schema";
-import { dosesMatchSource, markersExist } from "./validate";
+import { unverifiedDoseMentions } from "./validate";
 import { firstName, mergeMedications, toPortalLabSeries, type PortalPayload } from "./payload";
 
 export const PUBLICATION_DAYS = 90;
@@ -75,6 +75,9 @@ export function deriveParts(consulta: Consulta): DerivedParts {
   const conduta = consulta.outputs?.conduta || "";
   const receita = consulta.outputs?.receita || "";
   if (!analise && !conduta) throw new PortalPublishError("A consulta não tem análise nem conduta para publicar.", 422);
+  if (!receita.trim()) {
+    throw new PortalPublishError("A consulta não tem receita. Gere a receita e salve a consulta antes de publicar — o que o paciente toma vem só da receita.", 422);
+  }
 
   const blocks = extractThirtyDayBlocks(conduta);
   const parsedMedications = parseCronograma(receita) ?? parseReceitaItems(receita);
@@ -92,24 +95,27 @@ export function checkRules(parts: DerivedParts, content: PortalContent | null, s
   return [...seen];
 }
 
-export function validateContent(content: PortalContent, parts: DerivedParts, labSeries: LabSeries[], sex: string): void {
+/** Safety gate on AI content. Returns the content restricted to markers the patient actually has. */
+export function validateContent(raw: PortalContent, parts: DerivedParts, labSeries: LabSeries[], sex: string): PortalContent {
+  // Explanations for markers without results would never render; drop them rather than fail
+  const known = new Set<string>(labSeries.map((s) => s.key));
+  const content: PortalContent = { ...raw, exames: raw.exames.filter((e) => known.has(e.marcador)) };
+
   const violations = checkRules(parts, content, sex);
   if (violations.length) {
     throw new PortalPublishError(`Bloqueado pelas regras clínicas: ${violations.join(", ")}.`, 422);
   }
 
   const source = `${parts.receita}\n${parts.condutaSemPlanos}\n${parts.dieta ?? ""}\n${parts.treino ?? ""}`;
-  const meds = parts.parsedMedications.length ? [] : content.medicamentos;
-  const doses = dosesMatchSource(meds, source);
-  if (!doses.ok) {
-    const list = doses.missing.map((m) => `${m.nome} ${m.dose}`).join("; ");
-    throw new PortalPublishError(`A IA citou doses que não constam na receita/conduta: ${list}. Gere novamente.`, 422);
+  const unverified = unverifiedDoseMentions(flattenContentText(content), source);
+  if (unverified.length) {
+    throw new PortalPublishError(
+      `Bloqueado: o texto explicativo da IA citou doses que não estão escritas assim na receita/conduta (${unverified.join("; ")}). Gere novamente.`,
+      422
+    );
   }
 
-  const markers = markersExist(content.exames, new Set(labSeries.map((s) => s.key)));
-  if (!markers.ok) {
-    throw new PortalPublishError(`A IA citou exames sem registro: ${markers.unknown.join(", ")}. Gere novamente.`, 422);
-  }
+  return content;
 }
 
 export function assemblePayload(input: {
@@ -128,9 +134,6 @@ export function assemblePayload(input: {
   const schedule = (texto: string | undefined, introducao: string | undefined) =>
     texto ? { introducao, texto, dias: parseDays(texto) } : undefined;
 
-  // The snapshot must only ever carry the verified medication list, never the raw AI one
-  const medicamentos = mergeMedications(parts.parsedMedications, content.medicamentos);
-
   return {
     version: 1,
     publishedAt: input.publishedAt,
@@ -138,8 +141,8 @@ export function assemblePayload(input: {
     patientFirstName: context.firstName,
     consultaDate: context.consulta.timestamp,
     clinic: { doctor: CLINIC.doctor, crm: CLINIC.crm, name: CLINIC.name, contactLine },
-    content: { ...content, medicamentos },
-    medicamentos,
+    content,
+    medicamentos: mergeMedications(parts.parsedMedications, content.medicamentos),
     schedules: {
       dieta: schedule(parts.dieta, content.dieta?.introducao),
       treino: schedule(parts.treino, content.treino?.introducao),

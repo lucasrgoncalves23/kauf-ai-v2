@@ -36,12 +36,10 @@ function sameMedication(a: string, b: string): boolean {
 }
 
 /**
- * The parser's items are authoritative (names, doses, slots come straight from the
- * receita). The AI contribution is only the plain-language note per item. Without a
- * receita there is nothing to parse, so the AI list is used as-is (dose-checked upstream).
+ * Names, doses and times come only from the receita parser; the AI contributes at most a
+ * plain-language note per item. AI entries that match no parsed item are dropped.
  */
 export function mergeMedications(parsed: ParsedMedication[], ai: PortalContent["medicamentos"]): PortalMedication[] {
-  if (parsed.length === 0) return ai.map((m) => ({ ...m }));
   return parsed.map((p) => {
     const note = ai.find((a) => sameMedication(a.nome, p.nome))?.observacao;
     const observacao = note ?? p.observacao;

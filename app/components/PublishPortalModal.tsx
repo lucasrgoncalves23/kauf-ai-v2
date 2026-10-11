@@ -124,7 +124,8 @@ export function PublishPortalModal({
     same(latestConsulta.outputs?.receita, outputs.receita);
   const violations = [outputs.analise, outputs.conduta, outputs.receita].flatMap((t) => checkClinicalRules(t || "", sex));
   const rulesOk = violations.length === 0;
-  const ready = hasOutputs && cpfOk && saved && rulesOk && confirmed && !!latestConsulta;
+  const hasReceita = Boolean(outputs.receita?.trim());
+  const ready = hasOutputs && hasReceita && cpfOk && saved && rulesOk && confirmed && !!latestConsulta;
 
   const generate = async () => {
     if (!latestConsulta) return;
@@ -224,6 +225,11 @@ export function PublishPortalModal({
               )}
               <ul className="divide-y divide-slate-100 dark:divide-slate-700">
                 <CheckRow ok={hasOutputs} label="Análise ou conduta gerada" hint="Gere a análise e a conduta antes de publicar." />
+                <CheckRow
+                  ok={hasReceita}
+                  label="Receita gerada"
+                  hint="O que o paciente toma, com doses e horários, vem só da receita. Gere a receita antes de publicar."
+                />
                 <CheckRow ok={cpfOk} label="CPF válido no cadastro do paciente" hint="O paciente usa o CPF para abrir o link. Corrija no painel Paciente." />
                 <CheckRow
                   ok={saved}

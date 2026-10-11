@@ -11,7 +11,7 @@ export const GOLDEN_CONTENT = {
     { id: "hormonal", titulo: "Hormônios", ativo: false, acoes: [], maisAdiante: "Vamos conversar sobre isso quando o sono estiver mais estável." },
   ],
   medicamentos: [
-    { nome: "Vitamina D3", dose: "10.000 UI", slot: "cafe_da_manha", observacao: "Com a primeira refeição." },
+    { nome: "Vitamina D3", observacao: "Com a primeira refeição." },
   ],
   exames: [
     { marcador: "glicose", nomePopular: "Açúcar no sangue", explicacao: "Mostra quanto açúcar circula em jejum; o seu voltou ao normal.", situacao: "bem" },
@@ -29,9 +29,10 @@ describe("portal content schema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects unknown module ids, slots and markers", () => {
+  it("rejects unknown module ids and markers, and never keeps AI-written doses", () => {
     expect(portalContentSchema.safeParse({ ...GOLDEN_CONTENT, modulos: [{ id: "cirurgia", titulo: "X", ativo: true, acoes: [] }] }).success).toBe(false);
-    expect(portalContentSchema.safeParse({ ...GOLDEN_CONTENT, medicamentos: [{ nome: "A", dose: "1", slot: "madrugada" }] }).success).toBe(false);
+    const withDose = portalContentSchema.parse({ ...GOLDEN_CONTENT, medicamentos: [{ nome: "A", dose: "50mg", slot: "jantar" }] });
+    expect(withDose.medicamentos[0]).toEqual({ nome: "A" });
     expect(portalContentSchema.safeParse({ ...GOLDEN_CONTENT, exames: [{ marcador: "cortisol", nomePopular: "Cortisol", explicacao: "Hormônio do estresse.", situacao: "bem" }] }).success).toBe(false);
   });
 
@@ -104,7 +105,7 @@ describe("parsePortalContent", () => {
     expect(parsed.data.modulos).toHaveLength(1);
     expect(parsed.data.modulos[0].acoes).toHaveLength(6);
     expect(parsed.data.modulos[0].porque).toBeUndefined();
-    expect(parsed.data.medicamentos[0]).toEqual({ nome: "Vitamina D3", dose: "10.000 UI", slot: "outro" });
+    expect(parsed.data.medicamentos[0]).toEqual({ nome: "Vitamina D3" });
     expect(parsed.data.exames).toEqual([{ marcador: "glicose", nomePopular: "Açúcar", explicacao: "Mostra o açúcar em jejum.", situacao: "atencao" }]);
     expect(parsed.data.dieta).toBeUndefined();
   });

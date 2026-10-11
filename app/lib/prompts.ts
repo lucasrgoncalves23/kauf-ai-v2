@@ -584,8 +584,8 @@ COMO ESCREVER:
 - Fale com o paciente na segunda pessoa ("você").
 
 REGRAS OBRIGATÓRIAS DE SEGURANÇA:
-1. Nunca invente, arredonde ou converta doses, quantidades ou horários. Se a lista ITENS DO CRONOGRAMA for fornecida, em "medicamentos" repita exatamente cada item (nome, dose e horário iguais) e acrescente apenas a "observacao", usando só informação que já está na receita (ex.: "com a primeira refeição"). Não adicione nem remova itens.
-2. Se a lista ITENS DO CRONOGRAMA estiver vazia, monte "medicamentos" a partir da receita ou da conduta copiando as doses exatamente como escritas.
+1. NUNCA escreva doses, concentrações, quantidades de medicamento ou suplemento em nenhum campo (resumo, prioridades, ações, explicações, observações). A lista do que tomar, com doses e horários, é mostrada ao paciente diretamente da receita, sem passar por você. Quando uma ação envolver tomar algo, escreva só o nome e remeta à lista (ex.: "Tomar a vitamina D conforme a lista O que tomar").
+2. Em "medicamentos", devolva uma entrada para cada item de ITENS DA RECEITA, com o "nome" exatamente igual, e uma "observacao" curta sobre como tomar, usando só informação que já está na receita (ex.: "com a primeira refeição"). Não adicione itens que não estão na lista. Se a lista estiver vazia, devolva "medicamentos" vazio.
 3. Em "exames", use apenas os marcadores listados em EXAMES, com a chave exata em "marcador". Explique em uma frase o que cada um mostra para este paciente, sem citar o número.
 4. Em "modulos", inclua apenas as áreas que a conduta aborda. Quando a conduta disser que uma área está em AGUARDANDO ou aguarda estabilização, marque "ativo": false, deixe "acoes" vazio e explique em "maisAdiante" o que precisa melhorar antes.
 5. Em "proximosPassos.sinaisDeAlerta", cite sinais concretos e prudentes que justifiquem contato com a clínica antes do retorno. Não dê diagnósticos nem instruções de emergência além de "procure atendimento".
@@ -599,9 +599,9 @@ Preencha todos os campos da ferramenta. Seja conciso: o resumo tem no máximo 6 
 export function buildPortalContentPrompt(input: PortalPromptInput): { system: string; user: string } {
   const meds = input.parsedMedications.length
     ? input.parsedMedications
-        .map((m) => `- slot=${m.slot} | nome=${m.nome} | dose=${m.dose || "(sem dose)"}${m.observacao ? ` | uso=${m.observacao}` : ""}`)
+        .map((m) => `- nome=${m.nome}${m.observacao ? ` | uso=${m.observacao}` : ""}`)
         .join("\n")
-    : "(vazia — monte a lista a partir da receita/conduta copiando as doses exatamente)";
+    : "(vazia)";
 
   const user = `PACIENTE: ${input.firstName}
 SEXO: ${input.sex || "não informado"}
@@ -616,7 +616,7 @@ ${input.condutaSemPlanos || "(não fornecida)"}
 === RECEITA ===
 ${input.receita || "(não fornecida)"}
 
-=== ITENS DO CRONOGRAMA (repita exatamente em "medicamentos") ===
+=== ITENS DA RECEITA (um "medicamentos" por item, nome igual, só a observação) ===
 ${meds}
 
 === EXAMES (chave | nome | último valor | referência | situação | tendência) ===

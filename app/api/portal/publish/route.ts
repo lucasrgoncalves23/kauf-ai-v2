@@ -43,14 +43,14 @@ export async function POST(req: Request) {
 
     const context = await loadPublishContext(body.patientId, body.consultaId);
     const parts = deriveParts(context.consulta);
-    validateContent(parsed.data, parts, context.labSeries, context.sex);
+    const content = validateContent(parsed.data, parts, context.labSeries, context.sex);
 
     const now = new Date();
     const expiresAt = expiryFrom(now);
     const payload = assemblePayload({
       context,
       parts,
-      content: parsed.data,
+      content,
       publishedAt: now.toISOString(),
       expiresAt,
     });

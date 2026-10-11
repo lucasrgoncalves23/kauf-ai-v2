@@ -1,40 +1,41 @@
 import { describe, it, expect } from "vitest";
-import { dosesMatchSource, markersExist, lockoutAfter, decideOpen, GENERIC_DENIED, type OpenRow } from "../portal/validate";
+import { unverifiedDoseMentions, lockoutAfter, decideOpen, GENERIC_DENIED, type OpenRow } from "../portal/validate";
 import { mergeMedications, firstName } from "../portal/payload";
+import { validateContent } from "../portal/assemble";
 
-const RECEITA = "Vitamina D3: 10.000 UI\nÔmega-3: 2 g\nMagnésio bisglicinato: 400mg";
+const SOURCE = `Vitamina D3: 10.000 UI
+Ômega-3: 2 g
+Magnésio bisglicinato: 400mg
+Cipionato de testosterona: 100mg, intramuscular, 2x/semana
+Tirzepatida: 2,5mg SC 1x/semana por 4 semanas
+Proteína 1,8 g/kg/dia
+Uso: 2 cápsulas no almoço`;
 
-describe("dosesMatchSource", () => {
-  it("accepts doses present in the source regardless of spacing, case and accents", () => {
-    const r = dosesMatchSource(
-      [
-        { nome: "Vitamina D3", dose: "10.000 UI" },
-        { nome: "Ômega-3", dose: "2g" },
-        { nome: "Magnesio", dose: "400 MG" },
-      ],
-      RECEITA
-    );
-    expect(r.ok).toBe(true);
+describe("unverifiedDoseMentions", () => {
+  it("accepts doses written exactly as in the doctor's documents, ignoring spacing, case and accents", () => {
+    expect(
+      unverifiedDoseMentions(
+        "Tome 10.000 ui de vitamina D, 2g de ômega-3, 400 MG de magnésio, 2 capsulas no almoço e 1,8 g de proteína por quilo.",
+        SOURCE
+      )
+    ).toEqual([]);
   });
 
-  it("flags a dose that is not in the source and ignores empty doses", () => {
-    const r = dosesMatchSource([{ nome: "Vitamina D3", dose: "50.000 UI" }, { nome: "Água", dose: "" }], RECEITA);
-    expect(r.ok).toBe(false);
-    expect(r.missing).toEqual([{ nome: "Vitamina D3", dose: "50.000 UI" }]);
+  it("flags AI-composed doses that are not in the source — the real failure from production", () => {
+    const ai =
+      "Tirzepatida 2,5mg (semanas 1-4), titular até 12,5mg. Cipionato de Testosterona 100mg (semanas 1-8), 125mg (semanas 9-16). Ipamorelin 200mcg.";
+    expect(unverifiedDoseMentions(ai, SOURCE)).toEqual(["12,5mg", "125mg", "200mcg"]);
+  });
+
+  it("does not treat durations, counts or percentages as doses", () => {
+    expect(unverifiedDoseMentions("Caminhe 40 minutos, durma 7 horas, 3 vezes por semana, gordura em 28%.", SOURCE)).toEqual([]);
+  });
+
+  it("does not match a unit inside a longer word", () => {
+    expect(unverifiedDoseMentions("Faça 2 grupos de exercícios e 3 gomas de mascar.", SOURCE)).toEqual([]);
   });
 });
 
-describe("markersExist", () => {
-  it("reports markers the lab series does not contain", () => {
-    const exames = [
-      { marcador: "glicose", nomePopular: "x", explicacao: "y", situacao: "bem" },
-      { marcador: "tsh", nomePopular: "x", explicacao: "y", situacao: "bem" },
-    ] as const;
-    const r = markersExist([...exames], new Set(["glicose"]));
-    expect(r.ok).toBe(false);
-    expect(r.unknown).toEqual(["tsh"]);
-  });
-});
 
 describe("lockoutAfter", () => {
   const now = new Date("2026-10-11T12:00:00Z");
@@ -121,8 +122,8 @@ describe("mergeMedications", () => {
         { slot: "almoco", nome: "Ômega-3", dose: "2g" },
       ],
       [
-        { nome: "vitamina d3", dose: "50.000 UI", slot: "jantar", observacao: "Com a primeira refeição." },
-        { nome: "Creatina", dose: "5g", slot: "pre_treino", observacao: "Invented" },
+        { nome: "vitamina d3", observacao: "Com a primeira refeição." },
+        { nome: "Creatina", observacao: "Invented" },
       ]
     );
     expect(merged).toEqual([
@@ -131,9 +132,8 @@ describe("mergeMedications", () => {
     ]);
   });
 
-  it("uses the AI list only when nothing could be parsed", () => {
-    const ai = [{ nome: "Creatina", dose: "5g", slot: "pre_treino" as const }];
-    expect(mergeMedications([], ai)).toEqual(ai);
+  it("never produces items from the AI alone, even when nothing was parsed", () => {
+    expect(mergeMedications([], [{ nome: "Tirzepatida", observacao: "uma vez por semana" }])).toEqual([]);
   });
 });
 
@@ -141,5 +141,35 @@ describe("firstName", () => {
   it("takes the first word and falls back to Paciente", () => {
     expect(firstName("  Maria da Silva ")).toBe("Maria");
     expect(firstName("")).toBe("Paciente");
+  });
+});
+
+describe("validateContent", () => {
+  const parts = {
+    analise: "",
+    condutaSemPlanos: "4. SUPLEMENTAÇÃO\nVitamina D3: 10.000 UI",
+    receita: "1) Vitamina D3 10.000 UI\nCRONOGRAMA DIÁRIO\nCAFÉ DA MANHÃ\nVitamina D3: 10.000 UI",
+    parsedMedications: [{ slot: "cafe_da_manha" as const, nome: "Vitamina D3", dose: "10.000 UI" }],
+  };
+  const base = {
+    resumo: { texto: "Sua vitamina D está baixa e vamos repor com cuidado.", prioridades: ["Tomar a vitamina D conforme a lista"] },
+    modulos: [],
+    medicamentos: [],
+    exames: [
+      { marcador: "vitaminaD" as const, nomePopular: "Vitamina D", explicacao: "Está baixa.", situacao: "cuidado" as const },
+      { marcador: "pcr" as const, nomePopular: "Inflamação", explicacao: "Sem exame.", situacao: "bem" as const },
+    ],
+    proximosPassos: { examesAntes: [], sinaisDeAlerta: [] },
+  };
+  const labSeries = [{ key: "vitaminaD" }] as unknown as Parameters<typeof validateContent>[2];
+
+  it("drops explanations for markers the patient has no result for instead of failing", () => {
+    const out = validateContent(base, parts, labSeries, "Masculino");
+    expect(out.exames.map((e) => e.marcador)).toEqual(["vitaminaD"]);
+  });
+
+  it("blocks AI text that cites a dose not written in the receita/conduta", () => {
+    const bad = { ...base, resumo: { ...base.resumo, prioridades: ["Tomar 50.000 UI de vitamina D por semana"] } };
+    expect(() => validateContent(bad, parts, labSeries, "Masculino")).toThrow(/doses/);
   });
 });
