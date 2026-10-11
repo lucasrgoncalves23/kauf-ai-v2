@@ -24,6 +24,7 @@ import type {
   ToastState,
 } from "./types/clinical";
 import { DEFAULT_SETTINGS } from "./types/clinical";
+import { createBlankPatient } from "./utils/patient";
 import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-client";
 
 // --- COMPONENT IMPORTS ---
@@ -484,15 +485,20 @@ export default function Home() {
                 onExportPatient={handleExportPatient}
                 onExportPrescription={handleExportPrescription}
                 onClearSession={() => {
-                  // Start a fresh patient instead of blanking the current one —
-                  // blanking in place gets autosaved over the patient's record
+                  // Switch to an unsaved blank draft rather than blanking the current
+                  // patient in place, which would autosave over their record
                   setConfirmDialog({
                     title: "Limpar a tela?",
-                    message: "Um novo paciente será iniciado. O paciente atual permanece salvo.",
+                    message: "A tela será limpa. O paciente atual permanece salvo.",
                     confirmLabel: "Limpar",
                     onConfirm: () => {
                       localStorage.removeItem("kai-session");
-                      handleCreateNewPatient();
+                      setCurrentPatientId(createBlankPatient().id);
+                      setInputs({ anamnese: "", bioimpedancia: "", laboratoriais: "", genetica: "", wearable: "" });
+                      setOutputs({ analise: "", conduta: "", receita: "" });
+                      setPatientProfile({ name: "", age: "", sex: "", cpf: "", birthDate: "" });
+                      setChatMessages([]);
+                      setEngineStatus(null);
                       setConfirmDialog(null);
                     },
                   });
