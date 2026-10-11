@@ -8,6 +8,7 @@ type ToastProps = {
   message: string;
   type: ToastType;
   onClose: () => void;
+  onCancel?: () => void;
 };
 
 const TOAST_UI = {
@@ -28,11 +29,12 @@ const TOAST_UI = {
   },
 } as const;
 
-export function Toast({ message, type, onClose }: ToastProps) {
+export function Toast({ message, type, onClose, onCancel }: ToastProps) {
   useEffect(() => {
+    if (onCancel) return;
     const timer = setTimeout(onClose, type === "error" ? 6000 : 4000);
     return () => clearTimeout(timer);
-  }, [onClose, type]);
+  }, [onClose, type, onCancel]);
 
   const ui = TOAST_UI[type];
   const Icon = ui.icon;
@@ -46,6 +48,14 @@ export function Toast({ message, type, onClose }: ToastProps) {
       <span className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-snug">
         {message}
       </span>
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+        >
+          Cancelar
+        </button>
+      )}
       <button
         onClick={onClose}
         aria-label="Fechar"

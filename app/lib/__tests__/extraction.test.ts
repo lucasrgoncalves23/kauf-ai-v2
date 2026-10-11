@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractMetrics, parseMetricsFromInputs, extractDemographics } from "../extraction";
+import { extractMetrics, parseMetricsFromInputs, extractDemographics, isValidSex } from "../extraction";
 
 // =============================================
 // METRIC EXTRACTION
@@ -239,6 +239,31 @@ describe("extractDemographics — sex", () => {
   it("extracts abbreviated 'sexo: M'", () => {
     const r = extractDemographics("sexo: M");
     expect(r.sex?.value).toBe("M");
+  });
+});
+
+describe("isValidSex", () => {
+  it("accepts 'Masculino'", () => {
+    expect(isValidSex("Masculino")).toBe(true);
+  });
+
+  it("accepts 'Feminino'", () => {
+    expect(isValidSex("Feminino")).toBe(true);
+  });
+
+  it("rejects empty string", () => {
+    expect(isValidSex("")).toBe(false);
+  });
+
+  it("rejects undefined/null", () => {
+    expect(isValidSex(undefined)).toBe(false);
+    expect(isValidSex(null)).toBe(false);
+  });
+
+  it("rejects legacy free-text values", () => {
+    expect(isValidSex("F")).toBe(false);
+    expect(isValidSex("fem")).toBe(false);
+    expect(isValidSex("masculino")).toBe(false); // lowercase — not the canonical select value
   });
 });
 

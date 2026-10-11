@@ -16,7 +16,8 @@ export type AuditEventType =
   | "generation"  // AI generated content
   | "edit"        // User modified AI output
   | "export"      // Content exported/printed
-  | "session";    // Patient management action
+  | "session"     // Patient management action
+  | "rule_violation"; // A deterministic clinical rule blocked an action
 
 export type GenerationSource = "analise" | "conduta" | "receita" | "patient-pdf" | "chat";
 
@@ -72,7 +73,16 @@ export type SessionEvent = BaseAuditEvent & {
   details?: string;
 };
 
-export type AuditEvent = GenerationEvent | EditEvent | ExportEvent | SessionEvent;
+// Rule Violation Event — a deterministic clinical rule (see lib/clinicalRules.ts)
+// blocked a save/export action.
+export type RuleViolationEvent = BaseAuditEvent & {
+  type: "rule_violation";
+  source: GenerationSource;
+  ruleId: string;
+  matchedTerm: string;
+};
+
+export type AuditEvent = GenerationEvent | EditEvent | ExportEvent | SessionEvent | RuleViolationEvent;
 
 type AuditStore = {
   version: number;
@@ -94,6 +104,7 @@ function generateAuditId(type: AuditEventType): string {
     edit: "edt",
     export: "exp",
     session: "ses",
+    rule_violation: "rv",
   }[type];
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -192,6 +203,27 @@ export function logGeneration(params: {
   return event;
 }
 
+// Edits under ~3% of characters (or 5% of length) are treated as noise and not logged
+export function isSignificantChange(original: string, current: string): boolean {
+  if (!original || !current) return false;
+
+  const originalClean = original.trim();
+  const currentClean = current.trim();
+  if (originalClean === currentClean) return false;
+
+  const longerLength = Math.max(originalClean.length, currentClean.length);
+  const shorterLength = Math.min(originalClean.length, currentClean.length);
+  if ((longerLength - shorterLength) / longerLength > 0.05) return true;
+
+  let differences = 0;
+  for (let i = 0; i < shorterLength; i++) {
+    if (originalClean[i] !== currentClean[i]) differences++;
+  }
+  differences += longerLength - shorterLength;
+
+  return differences / longerLength > 0.03;
+}
+
 // Log user edit event
 export function logEdit(params: {
   patientId: string | null;
@@ -246,6 +278,32 @@ export function logExport(params: {
     patientName: params.patientName,
     format: params.format,
     contentHashes,
+  };
+
+  const store = getStore();
+  store.events.push(event);
+  saveStore(store);
+
+  return event;
+}
+
+// Log a deterministic clinical rule blocking a save/export action
+export function logRuleViolation(params: {
+  patientId: string | null;
+  patientName?: string;
+  source: GenerationSource;
+  ruleId: string;
+  matchedTerm: string;
+}): RuleViolationEvent {
+  const event: RuleViolationEvent = {
+    id: generateAuditId("rule_violation"),
+    timestamp: new Date().toISOString(),
+    type: "rule_violation",
+    patientId: params.patientId,
+    patientName: params.patientName,
+    source: params.source,
+    ruleId: params.ruleId,
+    matchedTerm: params.matchedTerm,
   };
 
   const store = getStore();

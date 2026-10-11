@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Eraser, Lightbulb, Sparkles } from "lucide-react";
+import { X, Eraser, Sparkles } from "lucide-react";
 import type { ClinicalOutputs, ClinicalData, ChatMessage } from "../types/clinical";
 import { ChatThread, ChatComposer } from "./ChatThread";
 import { ConfirmDialog } from "./ui";
@@ -11,7 +11,6 @@ type FullscreenEditorProps = {
   onClose: () => void;
   outputs: ClinicalOutputs;
   onOutputChange: (field: keyof ClinicalOutputs, value: string) => void;
-  onSaveAsExample: (field: "analise" | "conduta" | "receita") => void;
   inputs?: ClinicalData;
   onInputChange?: (field: keyof ClinicalData, value: string) => void;
   // Copilot props
@@ -61,7 +60,6 @@ export function FullscreenEditor({
   onClose,
   outputs,
   onOutputChange,
-  onSaveAsExample,
   inputs,
   onInputChange,
   chatMessages,
@@ -276,14 +274,6 @@ export function FullscreenEditor({
         <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
           <span className="text-xs text-slate-400">{outputs[outputPanel].length} caracteres</span>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => onSaveAsExample(outputPanel)}
-              className="px-3 py-2 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 transition-colors flex items-center gap-1.5"
-              title="Salvar esta correção como exemplo para treinar a IA"
-            >
-              <Lightbulb className="w-4 h-4" />
-              Salvar como exemplo
-            </button>
             <button
               onClick={onClose}
               className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors ${config.buttonClass}`}

@@ -36,4 +36,3 @@ export { ErrorBoundary } from "./ErrorBoundary";
 // Modal Components
 export { SettingsDrawer } from "./SettingsDrawer";
 export { FullscreenEditor } from "./FullscreenEditor";
-export { CorrectionsPanel } from "./CorrectionsPanel";

@@ -3,6 +3,7 @@
 // (Portuguese lab reports, decimal comma or dot).
 
 import type { Consulta } from "../types/clinical";
+export type { ClinicalData } from "../types/clinical";
 
 export type LabMarkerKey =
   | "glicose"
@@ -20,7 +21,26 @@ export type LabMarkerKey =
   | "vitaminaB12"
   | "ferritina"
   | "pcr"
-  | "creatinina";
+  | "creatinina"
+  | "peso"
+  | "gordura"
+  | "massaMagra";
+
+export type LabCategory = {
+  key: string;
+  label: string;
+  markers: LabMarkerKey[];
+};
+
+export const LAB_CATEGORIES: LabCategory[] = [
+  { key: "metabolismo", label: "Metabolismo Glicídico", markers: ["glicose", "hba1c", "insulina", "homaIr"] },
+  { key: "lipideos", label: "Lipídeos", markers: ["colesterolTotal", "ldl", "hdl", "triglicerideos"] },
+  { key: "tireoide", label: "Tireoide", markers: ["tsh", "t4Livre"] },
+  { key: "hormonios", label: "Hormônios", markers: ["testosterona"] },
+  { key: "micronutrientes", label: "Micronutrientes", markers: ["vitaminaD", "vitaminaB12", "ferritina"] },
+  { key: "inflamacao", label: "Inflamação / Renal", markers: ["pcr", "creatinina"] },
+  { key: "composicao", label: "Composição Corporal", markers: ["peso", "gordura", "massaMagra"] },
+];
 
 export type LabMarkerSpec = {
   key: LabMarkerKey;
@@ -124,6 +144,28 @@ export const LAB_MARKERS: LabMarkerSpec[] = [
     key: "creatinina", label: "Creatinina", unit: "mg/dL", min: 0.2, max: 15, refMin: 0.7, refMax: 1.3,
     patterns: [new RegExp(`creatinina[:\\s]*${NUM}`, "i")],
   },
+  {
+    key: "peso", label: "Peso", unit: "kg", min: 20, max: 300,
+    patterns: [
+      new RegExp(`peso\\s*(?:corporal)?[:\\s]*${NUM}\\s*kg`, "i"),
+      new RegExp(`peso[:\\s]*${NUM}`, "i"),
+    ],
+  },
+  {
+    key: "gordura", label: "Gordura Corporal", unit: "%", min: 2, max: 60, refMax: 25,
+    patterns: [
+      new RegExp(`gordura\\s*(?:corporal)?[:\\s]*${NUM}\\s*%`, "i"),
+      new RegExp(`(?:%\\s*gordura|gordura\\s*%)[:\\s]*${NUM}`, "i"),
+      new RegExp(`bf[:\\s]*${NUM}\\s*%`, "i"),
+    ],
+  },
+  {
+    key: "massaMagra", label: "Massa Magra", unit: "kg", min: 15, max: 120,
+    patterns: [
+      new RegExp(`massa\\s*(?:magra|muscular|livre\\s*de\\s*gordura)[:\\s]*${NUM}`, "i"),
+      new RegExp(`mlg[:\\s]*${NUM}`, "i"),
+    ],
+  },
 ];
 
 function parseNumber(str: string): number {
@@ -168,11 +210,26 @@ function shortDate(iso: string): string {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" });
 }
 
+const BIOCOMP_KEYS = new Set<LabMarkerKey>(["peso", "gordura", "massaMagra"]);
+
+function extractAllValues(inputs: ClinicalData | undefined): Partial<Record<LabMarkerKey, number>> {
+  const labVals = extractLabValues(inputs?.laboratoriais || "");
+  const bioVals = extractLabValues(inputs?.bioimpedancia || "");
+  for (const [k, v] of Object.entries(bioVals) as [LabMarkerKey, number][]) {
+    if (BIOCOMP_KEYS.has(k) && !(k in labVals)) labVals[k] = v;
+  }
+  return labVals;
+}
+
 /**
  * Build per-marker evolution series from a patient's saved consultas plus the
- * current (possibly unsaved) lab text. Markers with no datapoints are omitted.
+ * current (possibly unsaved) inputs. Markers with no datapoints are omitted.
  */
-export function buildLabSeries(consultas: Consulta[], currentLabText: string): LabSeries[] {
+export function buildLabSeries(
+  consultas: Consulta[],
+  currentLabText: string,
+  currentInputs?: ClinicalData,
+): LabSeries[] {
   const sorted = [...consultas].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
@@ -180,7 +237,7 @@ export function buildLabSeries(consultas: Consulta[], currentLabText: string): L
   const byMarker = new Map<LabMarkerKey, LabPoint[]>();
 
   for (const consulta of sorted) {
-    const values = extractLabValues(consulta.inputs?.laboratoriais || "");
+    const values = extractAllValues(consulta.inputs);
     for (const [key, value] of Object.entries(values) as [LabMarkerKey, number][]) {
       const points = byMarker.get(key) || [];
       points.push({ timestamp: consulta.timestamp, label: shortDate(consulta.timestamp), value });
@@ -188,9 +245,9 @@ export function buildLabSeries(consultas: Consulta[], currentLabText: string): L
     }
   }
 
-  // Current draft labs: only add when they differ from the latest saved point
-  // (otherwise a just-saved consulta would show twice)
-  const currentValues = extractLabValues(currentLabText || "");
+  const currentValues = currentInputs
+    ? extractAllValues(currentInputs)
+    : extractLabValues(currentLabText || "");
   for (const [key, value] of Object.entries(currentValues) as [LabMarkerKey, number][]) {
     const points = byMarker.get(key) || [];
     const last = points[points.length - 1];
@@ -209,6 +266,19 @@ export function buildLabSeries(consultas: Consulta[], currentLabText: string): L
     ...m,
     points: byMarker.get(m.key)!,
   }));
+}
+
+export type MarkerStatus = "normal" | "warning" | "critical";
+
+export function markerStatus(value: number, marker: LabMarkerSpec): MarkerStatus {
+  const { refMin, refMax } = marker;
+  if (refMin !== undefined && value < refMin) {
+    return value < refMin * 0.7 ? "critical" : "warning";
+  }
+  if (refMax !== undefined && value > refMax) {
+    return value > refMax * 1.5 ? "critical" : "warning";
+  }
+  return "normal";
 }
 
 /** Human-readable reference range, e.g. "70–99 mg/dL" or "< 150 mg/dL". */

@@ -6,9 +6,6 @@ import {
   Palette,
   Moon,
   Rows3,
-  Lightbulb,
-  ClipboardCheck,
-  ChevronRight,
   FileText,
   Download,
   RotateCcw,
@@ -29,8 +26,6 @@ type SettingsDrawerProps = {
   onClose: () => void;
   settings: Settings;
   onSettingsChange: (settings: Settings) => void;
-  onOpenCorrections: () => void;
-  correctionStats: { approvedExamples: number };
   auditStats?: AuditStats;
   onExportAuditLog?: () => void;
 };
@@ -40,8 +35,6 @@ export function SettingsDrawer({
   onClose,
   settings,
   onSettingsChange,
-  onOpenCorrections,
-  correctionStats,
   auditStats,
   onExportAuditLog,
 }: SettingsDrawerProps) {
@@ -158,36 +151,6 @@ export function SettingsDrawer({
                   }
                 />
               </div>
-            </div>
-
-            {/* Corrections Section */}
-            <div>
-              <SectionHeader
-                icon={Lightbulb}
-                iconBg="from-amber-500 to-orange-600"
-                title="Correções (IA Learning)"
-                subtitle={`${correctionStats.approvedExamples} exemplos aprovados`}
-              />
-
-              <button
-                onClick={onOpenCorrections}
-                className="w-full bg-white dark:bg-slate-800 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 shadow-sm cursor-pointer hover:border-amber-300 dark:hover:border-amber-600 transition-all group text-left"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center group-hover:bg-amber-100 dark:group-hover:bg-amber-900/30 transition-colors">
-                      <ClipboardCheck className="w-5 h-5 text-slate-600 dark:text-slate-300 group-hover:text-amber-600 dark:group-hover:text-amber-400" />
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        Gerenciar Correções
-                      </span>
-                      <p className="text-2xs text-slate-400 dark:text-slate-500">Aprovar, revisar ou excluir</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-slate-400" />
-                </div>
-              </button>
             </div>
 
             {/* Audit Trail Section */}

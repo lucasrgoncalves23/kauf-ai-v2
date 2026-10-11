@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { processStream } from "../utils/stream";
-import { getCorrections } from "../lib/corrections";
 import { condenseInputs } from "../lib/condense";
 import { getPinHeaders } from "../lib/api-client";
 import { logGeneration } from "../lib/audit";
 import { logger } from "../lib/logger";
+import { isValidSex } from "../lib/extraction";
+import { checkClinicalRules } from "../lib/clinicalRules";
 import type { ClinicalData, ClinicalOutputs, EngineStatus, ToastState } from "../types/clinical";
 
 interface GenerationWorkflowOptions {
@@ -15,8 +16,21 @@ interface GenerationWorkflowOptions {
   setToast: (toast: ToastState) => void;
   currentPatientId: string | null;
   patientName: string;
+  patientSex: string;
   engineStatus: EngineStatus;
   onEngineUpdate: () => void;
+}
+
+/** Extracts the server's explicit block reason instead of surfacing raw JSON in a toast. */
+async function readErrorMessage(response: Response, fallbackLabel: string): Promise<string> {
+  const body = await response.text().catch(() => "");
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed?.error) return parsed.error;
+  } catch {
+    // not JSON — fall through to raw body
+  }
+  return `${fallbackLabel} ${response.status}: ${body || response.statusText}`;
 }
 
 export function useGenerationWorkflow({
@@ -27,6 +41,7 @@ export function useGenerationWorkflow({
   setToast,
   currentPatientId,
   patientName,
+  patientSex,
   engineStatus,
   onEngineUpdate,
 }: GenerationWorkflowOptions) {
@@ -68,21 +83,28 @@ export function useGenerationWorkflow({
 
   // Validation functions
   function canRunAnalise(): boolean {
-    return inputs.anamnese.trim().length > 0;
+    return inputs.anamnese.trim().length > 0 && isValidSex(patientSex);
   }
 
   function canRunConduta(): boolean {
-    return inputs.anamnese.trim().length > 0;
+    return inputs.anamnese.trim().length > 0 && isValidSex(patientSex);
   }
 
   function canRunReceita(): boolean {
-    return outputs.conduta.trim().length > 0;
+    return outputs.conduta.trim().length > 0 && checkClinicalRules(outputs.conduta, patientSex).length === 0;
   }
 
   // --- ANALISE ---
   async function handleRunAnalise() {
-    if (!canRunAnalise()) {
+    if (!inputs.anamnese.trim()) {
       setToast({ message: "Preencha pelo menos a Anamnese para gerar a Análise", type: "error" });
+      return;
+    }
+    if (!isValidSex(patientSex)) {
+      setToast({
+        message: "Geração bloqueada: selecione o Sexo do paciente no painel lateral (Paciente → Sexo). Isso evita recomendações hormonais incorretas para o sexo do paciente.",
+        type: "error",
+      });
       return;
     }
 
@@ -95,8 +117,6 @@ export function useGenerationWorkflow({
     clearThinking("analise");
 
     try {
-      const approvedCorrections = getCorrections("analise", true).slice(0, 3);
-
       const phaseContext = engineStatus ? { phase: engineStatus.phase, waiting: engineStatus.waiting } : undefined;
 
       // Invisible pre-step: huge pasted exams are distilled into structured
@@ -106,13 +126,12 @@ export function useGenerationWorkflow({
       const response = await fetch("/api/generate-analise", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getPinHeaders() },
-        body: JSON.stringify({ patient, corrections: approvedCorrections, phaseContext }),
+        body: JSON.stringify({ patient, patientSex, phaseContext }),
         signal: analiseAbortRef.current.signal,
       });
 
       if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
-        throw new Error(`Análise ${response.status}: ${errorBody || response.statusText}`);
+        throw new Error(await readErrorMessage(response, "Análise"));
       }
 
       await processStream(
@@ -162,8 +181,15 @@ export function useGenerationWorkflow({
 
   // --- CONDUTA ---
   async function handleRunConduta() {
-    if (!canRunConduta()) {
+    if (!inputs.anamnese.trim()) {
       setToast({ message: "Preencha pelo menos a Anamnese para gerar a Conduta", type: "error" });
+      return;
+    }
+    if (!isValidSex(patientSex)) {
+      setToast({
+        message: "Geração bloqueada: selecione o Sexo do paciente no painel lateral (Paciente → Sexo). Isso evita recomendações hormonais incorretas para o sexo do paciente.",
+        type: "error",
+      });
       return;
     }
 
@@ -176,8 +202,6 @@ export function useGenerationWorkflow({
     clearThinking("conduta");
 
     try {
-      const approvedCorrections = getCorrections("conduta", true).slice(0, 3);
-
       const phaseContext = engineStatus ? { phase: engineStatus.phase, waiting: engineStatus.waiting } : undefined;
 
       // Invisible pre-step: huge pasted exams are distilled into structured
@@ -187,13 +211,12 @@ export function useGenerationWorkflow({
       const response = await fetch("/api/generate-conduta", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getPinHeaders() },
-        body: JSON.stringify({ patient, corrections: approvedCorrections, phaseContext }),
+        body: JSON.stringify({ patient, patientSex, phaseContext }),
         signal: condutaAbortRef.current.signal,
       });
 
       if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
-        throw new Error(`Conduta ${response.status}: ${errorBody || response.statusText}`);
+        throw new Error(await readErrorMessage(response, "Conduta"));
       }
 
       await processStream(
@@ -243,8 +266,16 @@ export function useGenerationWorkflow({
 
   // --- RECEITA ---
   async function handleRunReceita() {
-    if (!canRunReceita()) {
+    if (!outputs.conduta.trim()) {
       setToast({ message: "Gere a Conduta primeiro para criar a Receita", type: "error" });
+      return;
+    }
+    const condutaViolations = checkClinicalRules(outputs.conduta, patientSex);
+    if (condutaViolations.length > 0) {
+      setToast({
+        message: `Geração bloqueada: a Conduta contém o termo proibido "${condutaViolations[0].matchedTerm}" (regra ${condutaViolations[0].rule.id}). Corrija a Conduta antes de gerar a Receita.`,
+        type: "error",
+      });
       return;
     }
 

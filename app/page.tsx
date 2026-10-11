@@ -3,16 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 
 // --- LIB IMPORTS ---
-import {
-  approveCorrection,
-  unapproveCorrection,
-  deleteCorrection,
-  getCorrectionStats,
-} from "./lib/corrections";
 import { extractDemographics } from "./lib/extraction";
+import { checkClinicalRules } from "./lib/clinicalRules";
 import {
   getAuditStats,
   exportAuditLog,
+  logRuleViolation,
 } from "./lib/audit";
 
 // --- TYPE IMPORTS ---
@@ -25,12 +21,14 @@ import type {
   PatientRecord,
   PatientProfile,
   Consulta,
+  ToastState,
 } from "./types/clinical";
 import { DEFAULT_SETTINGS } from "./types/clinical";
 import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-client";
 
 // --- COMPONENT IMPORTS ---
 import { TrendingUp, Columns3 } from "lucide-react";
+import { SmartFollowUp } from "./components/SmartFollowUp";
 import { Toast, ConfirmDialog } from "./components/ui";
 import { TrashBanner } from "./components/TrashBanner";
 import { DataBox } from "./components/DataBox";
@@ -50,7 +48,6 @@ import {
   CopilotChat,
   SettingsDrawer,
   FullscreenEditor,
-  CorrectionsPanel,
   OutputPanel,
   ErrorBoundary,
   AnamneseForm,
@@ -65,7 +62,8 @@ import {
   useExportHandlers,
   useEngineStatus,
   useFileImport,
-  useCorrectionCapture,
+  useEditAudit,
+  useCronogramaSync,
 } from "./hooks";
 
 // --- MAIN PAGE ---
@@ -82,7 +80,7 @@ export default function Home() {
   }, []);
 
   // --- CORE STATE ---
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const [inputs, setInputs] = useState<ClinicalData>({ anamnese: "", bioimpedancia: "", laboratoriais: "", genetica: "", wearable: "" });
   const [outputs, setOutputs] = useState<ClinicalOutputs>({ analise: "", conduta: "", receita: "" });
   const [patientProfile, setPatientProfile] = useState<PatientProfile>({ name: "", age: "", sex: "", cpf: "", birthDate: "" });
@@ -145,6 +143,29 @@ export default function Home() {
       setToast({ message: "Nada para salvar. Preencha os dados do paciente primeiro.", type: "error" });
       return;
     }
+
+    const violations = [
+      ...checkClinicalRules(outputs.analise, patientProfile.sex).map(v => ({ ...v, source: "analise" as const })),
+      ...checkClinicalRules(outputs.conduta, patientProfile.sex).map(v => ({ ...v, source: "conduta" as const })),
+    ];
+    if (violations.length > 0) {
+      for (const v of violations) {
+        logRuleViolation({
+          patientId: currentPatientId,
+          patientName: patientProfile.name,
+          source: v.source,
+          ruleId: v.rule.id,
+          matchedTerm: v.matchedTerm,
+        });
+      }
+      const first = violations[0];
+      setToast({
+        message: `Salvamento bloqueado: documento contém o termo proibido "${first.matchedTerm}" (regra ${first.rule.id}). Corrija antes de salvar.`,
+        type: "error",
+      });
+      return;
+    }
+
     setIsSavingConsulta(true);
     try {
       const result = await saveConsulta(currentPatientId, {
@@ -168,7 +189,7 @@ export default function Home() {
     } finally {
       setIsSavingConsulta(false);
     }
-  }, [currentPatientId, inputs, outputs, engineStatus, setToast]);
+  }, [currentPatientId, inputs, outputs, engineStatus, setToast, patientProfile.sex, patientProfile.name]);
 
   const handleSetPatientFolder = useCallback((patientId: string, folder: string | undefined) => {
     setPatients(prev => {
@@ -205,12 +226,11 @@ export default function Home() {
   const { updateEngineStatus } = useEngineStatus(inputs, settings, setEngineStatus);
   const { handleImport, loadingImport } = useFileImport(inputs, setInputs, setToast);
 
-  const {
-    setOriginalOutputs,
-    showCorrectionsPanel, setShowCorrectionsPanel,
-    correctionsList,
-    handleOutputBlur, handleSaveAsExample, refreshCorrectionsList,
-  } = useCorrectionCapture(outputs, patientProfile, currentPatientId, setToast);
+  const { setOriginalOutputs, handleOutputBlur } =
+    useEditAudit(outputs, patientProfile.name, currentPatientId);
+
+  const { canSyncCronograma, isSyncingCronograma, handleSyncCronograma } =
+    useCronogramaSync(outputs, currentPatientId, setOutputs, setToast);
 
   const { saveStatus } = useSessionPersistence(
     { inputs, outputs, patientProfile, chatMessages, engineStatus, patients, currentPatientId, settings },
@@ -265,7 +285,7 @@ export default function Home() {
     previousOutputs, handleRestoreOutput, thinkingPreview,
   } = useGenerationWorkflow({
     inputs, outputs, setOutputs, setOriginalOutputs, setToast,
-    currentPatientId, patientName: patientProfile.name,
+    currentPatientId, patientName: patientProfile.name, patientSex: patientProfile.sex,
     engineStatus, onEngineUpdate: updateEngineStatus,
   });
 
@@ -274,7 +294,7 @@ export default function Home() {
     isGeneratingPatientPdf, patientPdfContent, prescriptionContent,
     handleExportClinical, handleExportPatient, handleExportPrescription,
   } = useExportHandlers({
-    outputs, currentPatientId, patientName: patientProfile.name, setToast,
+    outputs, currentPatientId, patientName: patientProfile.name, patientSex: patientProfile.sex, setToast,
   });
 
   // --- EFFECTS ---
@@ -306,7 +326,6 @@ export default function Home() {
         setShowSettings(false);
         setShowLabTrends(false);
         setShowCompare(false);
-        setShowCorrectionsPanel(false);
         setShowPatientSwitcher(false);
         setShowExportDropdown(false);
       }
@@ -322,11 +341,20 @@ export default function Home() {
     setPatientProfile(prev => ({
       ...prev,
       age: demographics.age?.value?.toString() || prev.age,
-      sex: demographics.sex ? (demographics.sex.value === "M" ? "Masculino" : "Feminino") : prev.sex,
+      // One-time convenience pre-fill only — once set (manually or by a prior
+      // extraction), never silently overwritten by a stray regex match
+      // elsewhere in the anamnese text. Sex now gates generation, so it must
+      // only ever change via the doctor's deliberate selection.
+      sex: !prev.sex && demographics.sex ? (demographics.sex.value === "M" ? "Masculino" : "Feminino") : prev.sex,
       cpf: demographics.cpf?.value || prev.cpf,
       birthDate: demographics.birthDate?.value || prev.birthDate,
     }));
   }, [inputs.anamnese]);
+
+  // Deterministic, non-LLM safety net — recomputed on every render so it
+  // always reflects the current (possibly hand-edited) text, never stale.
+  const analiseViolations = checkClinicalRules(outputs.analise, patientProfile.sex);
+  const condutaViolations = checkClinicalRules(outputs.conduta, patientProfile.sex);
 
   // --- RENDER ---
   const compact = settings.ui.compactView;
@@ -355,7 +383,7 @@ export default function Home() {
         data-density={compact ? "compact" : "comfortable"}
         className="min-h-screen text-slate-800 dark:text-slate-200 font-sans print:hidden overflow-hidden relative bg-white dark:bg-slate-900 transition-colors duration-300"
       >
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} onCancel={toast.onCancel} />}
         {trashBanner && (
           <TrashBanner
             patientName={trashBanner.patientName}
@@ -422,6 +450,11 @@ export default function Home() {
                     Comparar Consultas
                   </span>
                 </button>
+                <SmartFollowUp
+                  consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+                  currentInputs={inputs}
+                  engineStatus={engineStatus}
+                />
               </div>
             </aside>
             </ErrorBoundary>
@@ -502,6 +535,7 @@ export default function Home() {
                     thinkingText={thinkingPreview.analise}
                     canRestore={!!previousOutputs.analise && previousOutputs.analise !== outputs.analise}
                     onRestore={() => handleRestoreOutput("analise")}
+                    violations={analiseViolations}
                   />
                   <OutputPanel
                     label="Conduta & Planejamento"
@@ -516,6 +550,7 @@ export default function Home() {
                     thinkingText={thinkingPreview.conduta}
                     canRestore={!!previousOutputs.conduta && previousOutputs.conduta !== outputs.conduta}
                     onRestore={() => handleRestoreOutput("conduta")}
+                    violations={condutaViolations}
                   />
                   <OutputPanel
                     label="Receita Médica"
@@ -530,6 +565,9 @@ export default function Home() {
                     thinkingText={thinkingPreview.receita}
                     canRestore={!!previousOutputs.receita && previousOutputs.receita !== outputs.receita}
                     onRestore={() => handleRestoreOutput("receita")}
+                    canSyncCronograma={canSyncCronograma}
+                    isSyncingCronograma={isSyncingCronograma}
+                    onSyncCronograma={handleSyncCronograma}
                   />
                 </section>
               </div>
@@ -567,6 +605,7 @@ export default function Home() {
               onClose={() => setShowLabTrends(false)}
               consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
               currentLabText={inputs.laboratoriais}
+              currentInputs={inputs}
               patientName={patientProfile.name}
             />
             <ConsultaCompareModal
@@ -582,8 +621,6 @@ export default function Home() {
               onClose={() => setShowSettings(false)}
               settings={settings}
               onSettingsChange={setSettings}
-              onOpenCorrections={() => { setShowCorrectionsPanel(true); refreshCorrectionsList(); }}
-              correctionStats={getCorrectionStats()}
               auditStats={getAuditStats()}
               onExportAuditLog={() => {
                 const logJson = exportAuditLog();
@@ -604,7 +641,6 @@ export default function Home() {
               onClose={() => setFullscreenPanel(null)}
               outputs={outputs}
               onOutputChange={(field, value) => setOutputs(p => ({ ...p, [field]: value }))}
-              onSaveAsExample={handleSaveAsExample}
               inputs={inputs}
               onInputChange={(field, value) => setInputs(p => ({ ...p, [field]: value }))}
               chatMessages={chatMessages}
@@ -618,15 +654,6 @@ export default function Home() {
               onChatRetry={handleRetry}
               onChatUndoEdits={handleUndoEdits}
               onClearChat={() => setChatMessages([])}
-            />
-
-            <CorrectionsPanel
-              isOpen={showCorrectionsPanel}
-              onClose={() => setShowCorrectionsPanel(false)}
-              corrections={correctionsList}
-              onApprove={(id) => { approveCorrection(id); refreshCorrectionsList(); }}
-              onUnapprove={(id) => { unapproveCorrection(id); refreshCorrectionsList(); }}
-              onDelete={(id) => { deleteCorrection(id); refreshCorrectionsList(); }}
             />
 
             <ConfirmDialog

@@ -1,0 +1,8 @@
+[
+  {
+    "id": "EXEMPLO-001",
+    "sex": "Feminino",
+    "forbiddenTerm": "suporte testicular",
+    "notes": "REGRA DE EXEMPLO — placeholder para provar o mecanismo. Substituir pelas regras reais definidas pelo Dr. Kaufmann antes de confiar neste arquivo em produção."
+  }
+]

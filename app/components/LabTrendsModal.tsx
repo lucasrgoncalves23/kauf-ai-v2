@@ -1,14 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Consulta } from "../types/clinical";
-import { buildLabSeries, refRangeText, type LabSeries } from "../lib/labTrends";
+import type { ClinicalData, Consulta } from "../types/clinical";
+import {
+  buildLabSeries,
+  refRangeText,
+  markerStatus,
+  LAB_CATEGORIES,
+  type LabSeries,
+  type MarkerStatus,
+} from "../lib/labTrends";
 
 type LabTrendsModalProps = {
   isOpen: boolean;
   onClose: () => void;
   consultas: Consulta[];
   currentLabText: string;
+  currentInputs?: ClinicalData;
   patientName: string;
 };
 
@@ -18,6 +26,24 @@ const H = 120;
 const PAD_X = 10;
 const PAD_TOP = 12;
 const PAD_BOTTOM = 24;
+
+const STATUS_COLORS: Record<MarkerStatus, { dot: string; line: string; text: string }> = {
+  normal: {
+    dot: "fill-emerald-500 dark:fill-emerald-400 stroke-white dark:stroke-slate-800",
+    line: "stroke-emerald-500 dark:stroke-emerald-400",
+    text: "text-emerald-600 dark:text-emerald-400",
+  },
+  warning: {
+    dot: "fill-amber-500 dark:fill-amber-400 stroke-white dark:stroke-slate-800",
+    line: "stroke-amber-500 dark:stroke-amber-400",
+    text: "text-amber-600 dark:text-amber-400",
+  },
+  critical: {
+    dot: "fill-red-500 dark:fill-red-400 stroke-white dark:stroke-slate-800",
+    line: "stroke-red-500 dark:stroke-red-400",
+    text: "text-red-600 dark:text-red-400",
+  },
+};
 
 function formatValue(v: number): string {
   return v % 1 === 0 ? String(v) : v.toFixed(v < 10 ? 2 : 1).replace(/\.?0+$/, "");
@@ -29,7 +55,6 @@ function MarkerChart({ series }: { series: LabSeries }) {
   const { points } = series;
   const values = points.map((p) => p.value);
 
-  // Scale domain: data plus reference bounds, padded
   let lo = Math.min(...values, series.refMin ?? Infinity, series.refMax ?? Infinity);
   let hi = Math.max(...values, series.refMin ?? -Infinity, series.refMax ?? -Infinity);
   if (lo === hi) {
@@ -48,16 +73,16 @@ function MarkerChart({ series }: { series: LabSeries }) {
 
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(p.value)}`).join(" ");
 
-  // Reference band (clamped to plot area)
   const bandTop = y(Math.min(series.refMax ?? hi, hi));
   const bandBottom = y(Math.max(series.refMin ?? lo, lo));
   const hasBand = series.refMin !== undefined || series.refMax !== undefined;
 
   const hoveredPoint = hovered !== null ? points[hovered] : null;
+  const latestStatus = markerStatus(points[points.length - 1].value, series);
+  const colors = STATUS_COLORS[latestStatus];
 
   return (
     <div className="relative">
-      {/* Hover readout (fixed slot so the layout never jumps) */}
       <div className="absolute -top-5 right-0 text-[10px] text-slate-500 dark:text-slate-400 h-4">
         {hoveredPoint && (
           <span>
@@ -67,22 +92,19 @@ function MarkerChart({ series }: { series: LabSeries }) {
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={series.label}>
-        {/* Reference range band — recessive wash */}
         {hasBand && bandBottom > bandTop && (
           <rect
             x={PAD_X}
             y={bandTop}
             width={plotW}
             height={bandBottom - bandTop}
-            className="fill-slate-500/10 dark:fill-slate-400/10"
+            className="fill-emerald-500/8 dark:fill-emerald-400/8"
           />
         )}
 
-        {/* Hairline gridlines: top / bottom of plot */}
         <line x1={PAD_X} y1={PAD_TOP} x2={W - PAD_X} y2={PAD_TOP} strokeWidth="1" className="stroke-slate-200 dark:stroke-slate-700" />
         <line x1={PAD_X} y1={PAD_TOP + plotH} x2={W - PAD_X} y2={PAD_TOP + plotH} strokeWidth="1" className="stroke-slate-300 dark:stroke-slate-600" />
 
-        {/* Y extremes (muted) */}
         <text x={PAD_X} y={PAD_TOP - 3} fontSize="8" className="fill-slate-400 dark:fill-slate-500">
           {formatValue(hi)}
         </text>
@@ -90,34 +112,28 @@ function MarkerChart({ series }: { series: LabSeries }) {
           {formatValue(lo)}
         </text>
 
-        {/* Series line */}
         {points.length > 1 && (
-          <path d={path} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-[#2a78d6] dark:stroke-[#3987e5]" />
+          <path d={path} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={colors.line} />
         )}
 
-        {/* Dots with surface ring */}
-        {points.map((p, i) => (
-          <g key={i}>
-            <circle
-              cx={x(i)}
-              cy={y(p.value)}
-              r="4"
-              strokeWidth="2"
-              className="fill-[#2a78d6] dark:fill-[#3987e5] stroke-white dark:stroke-slate-800"
-            />
-            {/* Oversized invisible hit target */}
-            <circle
-              cx={x(i)}
-              cy={y(p.value)}
-              r="11"
-              fill="transparent"
-              onMouseEnter={() => setHovered(i)}
-              onMouseLeave={() => setHovered(null)}
-            />
-          </g>
-        ))}
+        {points.map((p, i) => {
+          const ptStatus = markerStatus(p.value, series);
+          const ptColors = STATUS_COLORS[ptStatus];
+          return (
+            <g key={i}>
+              <circle cx={x(i)} cy={y(p.value)} r="4" strokeWidth="2" className={ptColors.dot} />
+              <circle
+                cx={x(i)}
+                cy={y(p.value)}
+                r="11"
+                fill="transparent"
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
+              />
+            </g>
+          );
+        })}
 
-        {/* X labels: first and last */}
         <text x={PAD_X} y={H - 6} fontSize="8" className="fill-slate-400 dark:fill-slate-500">
           {points[0].label}
         </text>
@@ -136,6 +152,8 @@ function MarkerPanel({ series }: { series: LabSeries }) {
   const previous = series.points.length > 1 ? series.points[series.points.length - 2] : null;
   const delta = previous ? latest.value - previous.value : null;
   const refText = refRangeText(series);
+  const status = markerStatus(latest.value, series);
+  const colors = STATUS_COLORS[status];
 
   return (
     <div className="rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 p-4">
@@ -148,7 +166,7 @@ function MarkerPanel({ series }: { series: LabSeries }) {
         )}
       </div>
       <div className="flex items-baseline gap-2 mb-3">
-        <span className="text-xl font-semibold text-slate-900 dark:text-white">
+        <span className={`text-xl font-semibold ${status === "normal" ? "text-slate-900 dark:text-white" : colors.text}`}>
           {formatValue(latest.value)}
         </span>
         <span className="text-[10px] text-slate-400 dark:text-slate-500">{series.unit}</span>
@@ -175,29 +193,50 @@ export function LabTrendsModal({
   onClose,
   consultas,
   currentLabText,
+  currentInputs,
   patientName,
 }: LabTrendsModalProps) {
   const allSeries = useMemo(
-    () => (isOpen ? buildLabSeries(consultas, currentLabText) : []),
-    [isOpen, consultas, currentLabText]
+    () => (isOpen ? buildLabSeries(consultas, currentLabText, currentInputs) : []),
+    [isOpen, consultas, currentLabText, currentInputs]
   );
 
   if (!isOpen) return null;
 
-  const charted = allSeries.filter((s) => s.points.length > 1);
-  const single = allSeries.filter((s) => s.points.length === 1);
+  const seriesMap = new Map(allSeries.map((s) => [s.key, s]));
+
+  const categorized = LAB_CATEGORIES
+    .map((cat) => ({
+      ...cat,
+      series: cat.markers.map((k) => seriesMap.get(k)).filter(Boolean) as LabSeries[],
+    }))
+    .filter((cat) => cat.series.length > 0);
+
+  const uncategorized = allSeries.filter(
+    (s) => !LAB_CATEGORIES.some((cat) => cat.markers.includes(s.key))
+  );
+
+  const totalMarkers = allSeries.length;
+  const outOfRange = allSeries.filter(
+    (s) => markerStatus(s.points[s.points.length - 1].value, s) !== "normal"
+  ).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-4xl max-h-full overflow-y-auto rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-6">
+      <div className="relative w-full max-w-5xl max-h-full overflow-y-auto rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl p-6">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className="text-sm font-bold uppercase tracking-widest text-slate-700 dark:text-slate-200">
               Evolução Laboratorial
             </h2>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-              {patientName || "Paciente"} · {allSeries.length} marcador(es) identificado(s)
+              {patientName || "Paciente"} · {totalMarkers} marcador(es)
+              {outOfRange > 0 && (
+                <span className="text-amber-500 dark:text-amber-400 ml-1">
+                  · {outOfRange} fora da faixa
+                </span>
+              )}
             </p>
           </div>
           <button
@@ -211,33 +250,38 @@ export function LabTrendsModal({
           </button>
         </div>
 
-        {allSeries.length === 0 ? (
+        {totalMarkers === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400 py-10 text-center">
             Nenhum marcador laboratorial reconhecido. Importe ou cole exames no campo
             &quot;laboratoriais&quot; e salve consultas para acompanhar a evolução.
           </p>
         ) : (
-          <>
-            {charted.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                {charted.map((s) => (
-                  <MarkerPanel key={s.key} series={s} />
-                ))}
-              </div>
-            )}
-            {single.length > 0 && (
-              <>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
-                  Registro único (sem histórico ainda)
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  {single.map((s) => (
+          <div className="space-y-6">
+            {categorized.map((cat) => (
+              <div key={cat.key}>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+                  {cat.label}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {cat.series.map((s) => (
                     <MarkerPanel key={s.key} series={s} />
                   ))}
                 </div>
-              </>
+              </div>
+            ))}
+            {uncategorized.length > 0 && (
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+                  Outros
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {uncategorized.map((s) => (
+                    <MarkerPanel key={s.key} series={s} />
+                  ))}
+                </div>
+              </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

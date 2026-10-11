@@ -11,7 +11,7 @@
  * existing outbound message rows.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import {
   verifyWebhookChallenge,
   verifyWebhookSignature,
@@ -50,6 +50,28 @@ export async function POST(request: NextRequest) {
     logger.warn("WhatsApp webhook: invalid signature");
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
+
+  // TEMPORÁRIO (migração para o Kauf CRM): espelha o webhook já verificado
+  // para o CRM, que grava em modo espelho enquanto este app segue como
+  // sistema de registro. Fire-and-forget pós-resposta — nunca bloqueia nem
+  // falha o handler primário. Remover após o cutover.
+  after(async () => {
+    try {
+      await fetch("https://kauf-crm.vercel.app/api/webhooks/whatsapp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-hub-signature-256": signature ?? "",
+        },
+        body: rawBody,
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (error) {
+      logger.warn("WhatsApp webhook: relay to CRM failed", {
+        error: String(error),
+      });
+    }
+  });
 
   let body: Record<string, unknown>;
   try {

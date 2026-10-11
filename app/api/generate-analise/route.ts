@@ -1,5 +1,6 @@
 import { buildAnalisePrompt } from "@/app/lib/prompts";
 import { verifyClinicPin } from "@/app/lib/auth";
+import { isValidSex } from "@/app/lib/extraction";
 import { getAnthropicClient, MODEL, streamToSSE } from "@/app/lib/anthropic";
 
 export const runtime = "nodejs";
@@ -15,14 +16,21 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { patient } = await req.json();
+    const { patient, patientSex } = await req.json();
+
+    if (!isValidSex(patientSex)) {
+      return Response.json(
+        { error: "Geração bloqueada: sexo biológico do paciente ausente ou inválido. Selecione o Sexo do paciente antes de gerar." },
+        { status: 400 }
+      );
+    }
 
     const stream = client.messages.stream(
       {
         model: MODEL,
         max_tokens: 8192,
         temperature: 0.3,
-        messages: [{ role: "user", content: buildAnalisePrompt(patient) }],
+        messages: [{ role: "user", content: buildAnalisePrompt(patient, patientSex) }],
       },
       { signal: req.signal }
     );

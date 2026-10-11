@@ -53,7 +53,7 @@ All API routes require the `X-Clinic-Pin` header, verified server-side by [auth.
 
 ### Phase System (Engine)
 
-The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineStatus.ts) classifies Phase A/B/C from wearable metrics vs settings thresholds and produces `waiting: [{module, criteria}]`. The engine panel and the KAUAI chat still receive that status, but since the June-prompt restore the generation prompts no longer inject phase blocking rules or doctor-correction few-shot examples (the frontend still sends `corrections`/`phaseContext` in request bodies; the routes ignore them). `formatPhaseContext()`/`formatCorrections()` remain in prompts.ts, currently unused by any builder.
+The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineStatus.ts) classifies Phase A/B/C from wearable metrics vs settings thresholds and produces `waiting: [{module, criteria}]`. The engine panel and the KAUAI chat still receive that status, but since the June-prompt restore the generation prompts no longer inject phase blocking rules (the frontend still sends `phaseContext` in request bodies; the routes ignore it). `formatPhaseContext()` remains in prompts.ts, currently unused by any builder. The old "IA Learning" doctor-correction feature was removed in October 2026 (it had been disconnected from the prompts since the June restore); the `corrections` table still exists in Postgres but nothing reads or writes it.
 
 ---
 
@@ -66,12 +66,14 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | [anthropic.ts](app/lib/anthropic.ts) | Shared Anthropic SDK client + SSE helpers |
 | [prompts.ts](app/lib/prompts.ts) | All prompt builders (`{system, user}` shape) |
 | [auth.ts](app/lib/auth.ts) | Fail-closed PIN auth + rate limiting |
-| [db.ts](app/lib/db.ts) | Neon Postgres: patients, consultas, audit, corrections tables |
+| [db.ts](app/lib/db.ts) | Neon Postgres: patients, consultas, audit tables |
 | [api-client.ts](app/lib/api-client.ts) | Client-side API wrapper with localStorage fallback |
-| [corrections.ts](app/lib/corrections.ts) | Doctor-correction store (localStorage) for AI few-shot learning |
 | [extraction.ts](app/lib/extraction.ts) | Regex extraction of demographics/labs from text |
 | [audit.ts](app/lib/audit.ts) | Client-side audit log (localStorage) |
 | [crm.ts](app/lib/crm.ts) | Outbound CRM notifications |
+| [whatsapp.ts](app/lib/whatsapp.ts) | Meta Cloud API client (send template/text/document, webhook verification, payload parsing) |
+| [whatsappTemplates.ts](app/lib/whatsappTemplates.ts) | Approved template registry + parameter builders |
+| [whatsappNotify.ts](app/lib/whatsappNotify.ts) | Best-effort notification triggers (consulta, documento, lembrete, retorno, anamnese) |
 | [clientPdf.ts](app/lib/clientPdf.ts) | Browser-side pdf.js text extraction / page render / image compression |
 | [condense.ts](app/lib/condense.ts) | Invisible pre-generation step: input fields >15k chars are condensed via `/api/condense-exam` (Haiku) with in-memory caching; the doctor's input boxes are never modified |
 
@@ -90,11 +92,39 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | `/api/verify-pin` | PIN login (rate-limited) |
 | `/api/db/init` | Schema init (admin key or PIN) |
 | `/api/webhooks/crm` | Inbound CRM patient upsert (Bearer `KAUF_BRIDGE_SECRET`) |
+| `/api/webhooks/whatsapp` | Meta Cloud API webhook (GET verification + POST inbound messages/status) |
+| `/api/whatsapp/send` | Send template, freeform text, or document to a patient (PIN auth + LGPD check) |
+| `/api/whatsapp/messages` | GET conversation history for a patient |
+| `/api/whatsapp/opt-in` | POST consent / DELETE revoke / GET status (LGPD) |
 
 ### Frontend
 
 - [page.tsx](app/page.tsx) — dashboard orchestrator: patient sidebar (left), inputs + outputs (center), KAUAI chat + engine panel (right). State lives here, fanned out to hooks.
-- Hooks (`app/hooks/`): `useSessionPersistence` (debounced autosave → localStorage + DB, flush on tab close), `usePatientManagement` (switch/create/trash), `useGenerationWorkflow` (run/stop per output), `useFileImport` (multi-file import; client-side big-PDF handling), `useCopilotChat`, `useCorrectionCapture`, `useEngineStatus`, `useExportHandlers` (print via `window.print()`).
+- Hooks (`app/hooks/`): `useSessionPersistence` (debounced autosave → localStorage + DB, flush on tab close), `usePatientManagement` (switch/create/trash), `useGenerationWorkflow` (run/stop per output), `useFileImport` (multi-file import; client-side big-PDF handling), `useCopilotChat`, `useEditAudit` (logs significant doctor edits of AI output to the audit trail), `useEngineStatus`, `useExportHandlers` (print via `window.print()`).
+
+---
+
+## WhatsApp CRM (Direct Integration)
+
+Direct Meta Cloud API integration for patient messaging. Env vars: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_BUSINESS_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. All optional — when unconfigured, WhatsApp features are silently disabled (same pattern as the CRM bridge).
+
+### Message Flow
+- **Outbound templates** (outside 24h window): consulta_resumo, lembrete_consulta, retorno_fase, formulario_anamnese, documento_disponivel. Defined in [whatsappTemplates.ts](app/lib/whatsappTemplates.ts); must match approved templates in Meta Business Manager.
+- **Freeform text/documents** (within 24h window): doctor can reply directly via the send endpoint. The 24h window opens when a patient sends any inbound message.
+- **Inbound**: patient replies (text, buttons, interactive) are stored in `wa_messages` and linked to patients by phone. Button payloads (CONFIRM_APPOINTMENT, RESCHEDULE_APPOINTMENT, SCHEDULE_RETURN) are logged for future automation.
+
+### Auto-triggers
+- Consulta saved → sends `consulta_resumo` template (wired in [patients/[id]/consultas/route.ts](app/api/patients/[id]/consultas/route.ts) alongside CRM notify)
+- Document exported → sends `documento_disponivel` (via `notifyWhatsAppDocumentoExportado`)
+- All triggers check LGPD opt-in before sending; fail silently if unconsented.
+
+### DB Tables
+- `wa_messages` — every sent/received message with delivery status tracking
+- `wa_conversations` — active 24h session windows per phone
+- `wa_opt_in` — LGPD consent records (patient_id, consented_at, revoked_at, method)
+
+### LGPD Compliance
+Patients must be opted in via `/api/whatsapp/opt-in` before any automated message is sent. Opt-out stops all messaging. The "SAIR" keyword in inbound messages should trigger auto-revocation (TODO: implement in webhook handler).
 
 ---
 

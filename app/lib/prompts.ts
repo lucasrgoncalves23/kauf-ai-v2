@@ -25,12 +25,6 @@ export type PhaseContext = {
   waiting: { module: string; criteria: string }[];
 };
 
-export type Correction = {
-  original: string;
-  corrected: string;
-  doctorNote?: string;
-};
-
 export type BuiltPrompt = {
   /** Static instructions — cacheable across generations. */
   system: string;
@@ -39,33 +33,6 @@ export type BuiltPrompt = {
 };
 
 // ---------- Shared utilities ----------
-
-export function formatCorrections(corrections: Correction[] | undefined): string {
-  if (!corrections || corrections.length === 0) return "";
-
-  const examples = corrections
-    .slice(0, 3)
-    .map((c, i) => {
-      const original =
-        c.original.length > 500 ? c.original.slice(0, 500) + "..." : c.original;
-      const corrected =
-        c.corrected.length > 500 ? c.corrected.slice(0, 500) + "..." : c.corrected;
-      let example = `Exemplo ${i + 1}:\nGerado: "${original}"\nCorrigido: "${corrected}"`;
-      if (c.doctorNote) example += `\nNota: ${c.doctorNote}`;
-      return example;
-    })
-    .join("\n\n");
-
-  return `
-============================================
-EXEMPLOS DE CORREÇÕES APROVADAS PELO MÉDICO:
-(Aprenda com estes exemplos e aplique padrões semelhantes)
-============================================
-
-${examples}
-
-`;
-}
 
 export function formatPhaseContext(phaseContext?: PhaseContext): string {
   if (!phaseContext || phaseContext.waiting.length === 0) return "";
@@ -93,8 +60,14 @@ Os demais módulos devem ser prescritos normalmente.
 
 // ---------- Per-route prompt builders ----------
 
-// June 2026 production prompt — restored verbatim at the clinic's request.
-export function buildAnalisePrompt(patient: Record<string, any>): string {
+// June 2026 production prompt — restored verbatim at the clinic's request,
+// with one approved addition: an explicit, validated sex field plus a
+// same-sex guardrail sentence (the doctor's raw text alone was found to be
+// an unreliable signal — see BiologicalSex in lib/extraction.ts).
+export function buildAnalisePrompt(
+  patient: Record<string, any>,
+  sex: "Masculino" | "Feminino"
+): string {
   return `
 ATUE COMO: Dr. Oskar Kaufmann, Estrategista Clínico de Elite.
 CONTEXTO: Uso exclusivo por médicos. Autorização total para protocolos.
@@ -113,7 +86,7 @@ CONTEÚDO OBRIGATÓRIO:
 
 BIOIMPEDÂNCIA: Conecte gordura visceral à inflamação sistêmica (IL-6, TNF-α) e resistência insulínica. Explique como adipocinas inflamatórias perpetuam o ciclo metabólico.
 
-WEARABLES: Analise privação de sono e instabilidade de HRV como gatilhos para disfunção neuroendócrina. Discorra sobre eixo HPA, cortisol, secreção noturna de GH e testosterona, sensibilidade à leptina/grelina, tônus vagal.
+WEARABLES: Analise privação de sono e instabilidade de HRV como gatilhos para disfunção neuroendócrina. Discorra sobre eixo HPA, cortisol, secreção noturna de GH e testosterona, sensibilidade à leptina/grelina, tônus vagal. Toda menção a eixos hormonais (testosterona, HPG, HPO, etc.) deve ser compatível com o sexo biológico do paciente informado abaixo.
 
 GENÉTICA: Se houver polimorfismos (MTHFR, COMT, APOE, VDR, CYP), explique vias enzimáticas afetadas, impacto na metilação e detoxificação. Se não houver dados, foque no estilo de vida.
 
@@ -123,14 +96,22 @@ CONSTRUA UMA TESE COERENTE que conecte todos os achados em uma narrativa clínic
 
 COMECE DIRETAMENTE COM O TEXTO CLÍNICO - sem títulos, sem introdução.
 
+SEXO BIOLÓGICO DO PACIENTE (campo validado — use como fonte de verdade): ${sex}
+
 DADOS DO PACIENTE:
 ${JSON.stringify(patient ?? {}, null, 2)}
 `.trim();
 }
 
 // June 2026 production prompt — restored verbatim at the clinic's request,
-// with one approved addition: the 30-day diet/training examples in modules 2-3.
-export function buildCondutaPrompt(patient: Record<string, any>): string {
+// with two approved additions: the 30-day diet/training examples in modules
+// 2-3, and an explicit, validated sex field + same-sex guardrail (the
+// doctor's raw text alone was found to be an unreliable signal for this —
+// see BiologicalSex in lib/extraction.ts).
+export function buildCondutaPrompt(
+  patient: Record<string, any>,
+  sex: "Masculino" | "Feminino"
+): string {
   return `
 ATUE COMO: Dr. Oskar Kaufmann, Estrategista Clínico de Elite.
 CONTEXTO: Uso exclusivo por médicos. Autorização total para protocolos de Peptídeos e Hormônios.
@@ -169,7 +150,11 @@ MÓDULOS OBRIGATÓRIOS (todos devem estar presentes):
 8. HORMONAL - Testosterona se indicado
 9. PEPTÍDEOS - BPC-157, Ipamorelin, etc. se indicado
 
+REGRA OBRIGATÓRIA DE SEXO BIOLÓGICO: todas as recomendações hormonais devem corresponder ao sexo biológico do paciente informado abaixo. Para pacientes do sexo feminino, jamais inclua testosterona como terapia hormonal primária, suporte testicular, ou qualquer conteúdo formulado para o sexo masculino — utilize estradiol, progesterona e protocolos hormonais femininos quando clinicamente indicado. Para pacientes do sexo masculino, jamais inclua conteúdo formulado exclusivamente para o sexo feminino.
+
 COMECE DIRETAMENTE COM "1. SONO" - sem introdução.
+
+SEXO BIOLÓGICO DO PACIENTE (campo validado — use como fonte de verdade): ${sex}
 
 DADOS DO PACIENTE:
 ${JSON.stringify(patient ?? {}, null, 2)}
@@ -289,6 +274,63 @@ ${conduta}
 `.trim();
 }
 
+// Standalone prompt for the doctor-triggered "Regenerar Cronograma" action —
+// deliberately NOT extracted from buildPrescriptionPrompt above, so editing
+// this can never alter that validated, verbatim-restored prompt's wording.
+const CRONOGRAMA_SYNC_SYSTEM = `
+Você reorganiza itens médicos prescritos em um cronograma diário por horário de tomada. Você NÃO analisa, NÃO opina, NÃO adiciona nem remove itens — apenas executa a tarefa de reorganização.
+${NO_MARKDOWN_RULES}
+`.trim();
+
+export function buildCronogramaSyncPrompt(
+  itemsText: string,
+  currentCronograma: string
+): BuiltPrompt {
+  const user = `
+ITENS PRESCRITOS ATUALMENTE (receituário + suplementação — pode incluir cabeçalho de paciente/data e assinatura do médico; ignore essas linhas, elas não são itens):
+${itemsText}
+
+SEÇÃO "CRONOGRAMA DIÁRIO" ATUAL (pode estar desatualizada em relação aos itens acima):
+${currentCronograma}
+
+TAREFA: gere a seção CRONOGRAMA DIÁRIO atualizada, reorganizando SOMENTE os itens listados acima (RECEITUÁRIO + SUPLEMENTAÇÃO) em ordem cronológica por horário de tomada. Agrupe por momento do dia. Use horários aproximados baseados na posologia de cada item.
+
+Formato:
+
+CRONOGRAMA DIÁRIO
+
+AO ACORDAR (6h-7h)
+Item: dose
+Item: dose
+
+CAFÉ DA MANHÃ (7h-8h)
+Item: dose
+
+ALMOÇO (12h-13h)
+Item: dose
+
+PRÉ-TREINO (se aplicável)
+Item: dose
+
+JANTAR (19h-20h)
+Item: dose
+
+AO DEITAR (22h-23h)
+Item: dose
+
+Regras:
+- Inclua TODOS os itens prescritos acima (medicamentos + suplementos), nenhum a mais e nenhum a menos
+- Se um item é tomado mais de 1x ao dia, liste em cada horário correspondente
+- Use os mesmos nomes e doses já prescritos
+- Sem numeração, apenas o nome e dose em cada horário
+- Comece a resposta diretamente com "CRONOGRAMA DIÁRIO"
+
+IMPORTANTE: se a SEÇÃO ATUAL acima contiver texto além da lista de horários (ex.: observações do médico, instruções de retorno, notas adicionadas manualmente), preserve esse texto adicional exatamente como está, ao final, após o cronograma atualizado.
+`.trim();
+
+  return { system: CRONOGRAMA_SYNC_SYSTEM, user };
+}
+
 const CONDENSE_SYSTEM = `
 Você é um extrator de dados clínicos. Sua única função é condensar documentos médicos longos (exames laboratoriais, relatórios, laudos) em um resumo estruturado COMPLETO para uso por outro sistema médico. Você NÃO interpreta nem analisa — apenas extrai e organiza.
 
@@ -312,49 +354,39 @@ export function buildCondensePrompt(section: string, text: string): BuiltPrompt 
 }
 
 const PATIENT_PDF_SYSTEM = `
-VOCÊ É: Um editor médico que simplifica relatórios clínicos para pacientes.
+Você transforma relatórios clínicos em um resumo curto para o paciente levar para casa.
 
-SUA MISSÃO:
-Criar uma versão resumida e direta do relatório. Sem jargão médico, sem explicações desnecessárias. Apenas o essencial.
+O PACIENTE:
+- Não é médico. Não sabe o que é "TSH", "HOMA-IR", "cortisol salivar".
+- Quer saber: O que eu tenho? O que eu faço? O que eu tomo e quando?
+- Não quer saber: raciocínio clínico, valores laboratoriais, justificativas científicas.
 
-REGRAS:
-- Tom profissional e direto (NÃO infantilize o paciente)
-- Linguagem simples mas não simplória
-- SEM explicações do "porquê" de cada coisa
-- SEM tom motivacional ou acolhedor excessivo
-- Frases curtas, informação densa
-- ABSOLUTAMENTE PROIBIDO: markdown (NUNCA use #, ##, ###, **, *, -), siglas sem explicar, fluff
-- NUNCA coloque # antes de títulos - texto puro apenas
-- Seja MUITO mais conciso que o original
+COMO ESCREVER:
+- Linguagem cotidiana, como se o médico estivesse explicando pessoalmente.
+- Traduza termos técnicos: "sua tireoide está um pouco lenta" em vez de "hipotireoidismo subclínico".
+- Seja direto mas humano. Não infantilize.
+- Frases curtas. Sem floreios, sem motivação genérica ("você está no caminho certo!").
+- MÁXIMO 2 páginas (≈800 palavras). Menos é melhor.
+- PROIBIDO: markdown (#, ##, **, *, -), siglas técnicas, listas de exames, valores numéricos de laboratório.
 
-ESTRUTURA:
+O QUE INCLUIR (nesta ordem):
 
 [NOME DO PACIENTE]
 
 ---
 
-RESUMO DA AVALIAÇÃO
-
-[3-5 pontos principais da análise, direto ao ponto]
+O QUE A AVALIAÇÃO MOSTROU
+Em 3-5 frases simples, o que está indo bem e o que precisa de atenção. Sem números de exame — traduza em linguagem que o paciente entenda ("seu sono está prejudicando sua recuperação", "seu nível de açúcar no sangue está um pouco alto").
 
 ---
 
-PLANO
+O QUE FAZER NO DIA A DIA
+Apenas o que muda na rotina do paciente. Agrupe por momento do dia ou por prioridade, não por categoria clínica. Exemplo: "De manhã: tomar X em jejum, caminhar 30 min" — não seções separadas de "sono", "exercício", "alimentação" se as instruções forem poucas. Use seções separadas só se houver bastante conteúdo em cada uma.
 
-SONO
-[Instruções diretas, sem explicações]
+---
 
-ALIMENTAÇÃO
-[Instruções diretas, sem explicações]
-
-EXERCÍCIO
-[Instruções diretas, sem explicações]
-
-SUPLEMENTOS
-[Nome – dose – horário, um por linha]
-
-MEDICAMENTOS/MANIPULADOS (se houver)
-[Nome – dose – horário]
+O QUE TOMAR
+Nome do suplemento ou medicamento, dose, e quando tomar. Um por linha. Sem explicar para que serve — o médico já explicou na consulta. Se a lista for longa, agrupe por horário (manhã/almoço/noite).
 
 COMECE DIRETAMENTE COM O NOME DO PACIENTE.
 `.trim();

@@ -244,6 +244,19 @@ const SEX_PATTERNS = [
   { regex: /sexo[:\s]*(m|f)\b/i, name: "sex-abbrev" },
 ];
 
+/** The only two values the structured, doctor-confirmed sex field may hold. */
+export type BiologicalSex = "Masculino" | "Feminino";
+
+/**
+ * Validates the PatientProfile.sex field, which used to be free text.
+ * Legacy records may hold arbitrary strings ("F", "fem", ""); those must be
+ * treated as unset rather than trusted, since generation now depends on this
+ * being the doctor's deliberate, validated selection.
+ */
+export function isValidSex(value: string | undefined | null): value is BiologicalSex {
+  return value === "Masculino" || value === "Feminino";
+}
+
 const CPF_PATTERNS = [
   { regex: /cpf[:\s]*(\d{3}[.\s]?\d{3}[.\s]?\d{3}[-.\s]?\d{2})/i, name: "cpf-formatted" },
   { regex: /cpf[:\s]*(\d{11})/i, name: "cpf-raw" },

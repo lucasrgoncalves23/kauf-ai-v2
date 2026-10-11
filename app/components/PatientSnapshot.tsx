@@ -1,6 +1,7 @@
 "use client";
 
 import type { PatientProfile } from "../types/clinical";
+import { isValidSex } from "../lib/extraction";
 import { SectionLabel } from "./ui/SectionLabel";
 
 type PatientSnapshotProps = {
@@ -40,12 +41,15 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
           </div>
           <div>
             <label className={labelClass}>Sexo</label>
-            <input
-              className={`${inputClass} capitalize`}
-              placeholder="--"
-              value={profile.sex}
+            <select
+              className={inputClass}
+              value={isValidSex(profile.sex) ? profile.sex : ""}
               onChange={(e) => onProfileChange({ ...profile, sex: e.target.value })}
-            />
+            >
+              <option value="">— Selecionar —</option>
+              <option value="Masculino">Masculino</option>
+              <option value="Feminino">Feminino</option>
+            </select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 compact:gap-2">

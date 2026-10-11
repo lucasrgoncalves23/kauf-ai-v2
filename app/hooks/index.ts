@@ -5,4 +5,5 @@ export { useCopilotChat } from "./useCopilotChat";
 export { useExportHandlers } from "./useExportHandlers";
 export { useEngineStatus } from "./useEngineStatus";
 export { useFileImport } from "./useFileImport";
-export { useCorrectionCapture } from "./useCorrectionCapture";
+export { useEditAudit } from "./useEditAudit";
+export { useCronogramaSync } from "./useCronogramaSync";
