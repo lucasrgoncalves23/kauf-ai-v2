@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { PatientRecord, Consulta } from "../types/clinical";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { groupByLastConsulta, lastConsultaAt } from "../lib/patientSort";
 
 type PatientSwitcherProps = {
   isOpen: boolean;
@@ -83,7 +84,7 @@ export function PatientSwitcher({
   const [search, setSearch] = useState("");
   const [expandedPatientId, setExpandedPatientId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({ Ativos: true });
-  const [viewMode, setViewMode] = useState<"folders" | "alpha">("folders");
+  const [viewMode, setViewMode] = useState<"folders" | "alpha" | "recent">("folders");
   const [folderMenuPatientId, setFolderMenuPatientId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
@@ -142,6 +143,12 @@ export function PatientSwitcher({
       Object.entries(groups).sort(([a], [b]) => a.localeCompare(b))
     );
   }, [filtered]);
+
+  // Group by last consulta date (most recent first)
+  const byRecency = useMemo(
+    () => (viewMode === "recent" ? groupByLastConsulta(filtered, consultas) : []),
+    [filtered, consultas, viewMode]
+  );
 
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) => ({ ...prev, [folder]: !prev[folder] }));
@@ -262,7 +269,7 @@ export function PatientSwitcher({
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setViewMode("folders")}
-                  className={`text-2xs font-semibold px-2 py-1 rounded-md transition-colors ${
+                  className={`text-2xs font-semibold px-1.5 py-1 rounded-md transition-colors ${
                     viewMode === "folders"
                       ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300"
                       : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -272,13 +279,24 @@ export function PatientSwitcher({
                 </button>
                 <button
                   onClick={() => setViewMode("alpha")}
-                  className={`text-2xs font-semibold px-2 py-1 rounded-md transition-colors ${
+                  className={`text-2xs font-semibold px-1.5 py-1 rounded-md transition-colors ${
                     viewMode === "alpha"
                       ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300"
                       : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   }`}
                 >
                   A–Z
+                </button>
+                <button
+                  onClick={() => setViewMode("recent")}
+                  className={`text-2xs font-semibold px-1.5 py-1 rounded-md transition-colors ${
+                    viewMode === "recent"
+                      ? "bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300"
+                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  }`}
+                  title="Ordenar pela data da última consulta"
+                >
+                  Recentes
                 </button>
               </div>
               <button
@@ -496,6 +514,48 @@ export function PatientSwitcher({
               </>
             )}
 
+            {/* Last-consulta view */}
+            {viewMode === "recent" && filtered.length > 0 && (
+              <>
+                {byRecency.map(({ label, patients: bucketPatients }) => (
+                  <div key={label}>
+                    <div className="px-3 py-1.5 bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-100 dark:border-slate-700/30 sticky top-0 flex items-center justify-between">
+                      <span className="text-2xs font-bold text-slate-400 dark:text-slate-500">{label}</span>
+                      <span className="text-2xs font-medium text-slate-400 dark:text-slate-500">{bucketPatients.length}</span>
+                    </div>
+                    {bucketPatients.map((patient) => (
+                      <PatientRow
+                        key={patient.id}
+                        patient={patient}
+                        isCurrent={patient.id === currentPatientId}
+                        isEditing={editingPatientId === patient.id}
+                        editingName={editingPatientName}
+                        onEditingNameChange={onEditingNameChange}
+                        onSwitch={onSwitch}
+                        onSaveRename={onSaveRename}
+                        onCancelRename={onCancelRename}
+                        onStartRename={onStartRename}
+                        onDelete={onDelete}
+                        canDelete={sortedPatients.length > 1}
+                        consultas={consultas[patient.id] || []}
+                        isConsultaExpanded={expandedPatientId === patient.id}
+                        onToggleConsultas={() => setExpandedPatientId(expandedPatientId === patient.id ? null : patient.id)}
+                        onLoadConsulta={onLoadConsulta}
+                        folderMenuOpen={folderMenuPatientId === patient.id}
+                        onToggleFolderMenu={() => setFolderMenuPatientId(folderMenuPatientId === patient.id ? null : patient.id)}
+                        allFolders={allFolders}
+                        onSetFolder={(folder) => {
+                          onSetPatientFolder?.(patient.id, folder);
+                          setFolderMenuPatientId(null);
+                        }}
+                        dateMode="lastConsulta"
+                      />
+                    ))}
+                  </div>
+                ))}
+              </>
+            )}
+
           </div>
 
           {/* Lixeira (Trash) section */}
@@ -605,6 +665,8 @@ type PatientRowProps = {
   allFolders: string[];
   onSetFolder: (folder: string | undefined) => void;
   indented?: boolean;
+  /** Which date to show under the name: last edit (default) or last consulta. */
+  dateMode?: "updated" | "lastConsulta";
 };
 
 function PatientRow({
@@ -628,7 +690,15 @@ function PatientRow({
   allFolders,
   onSetFolder,
   indented,
+  dateMode = "updated",
 }: PatientRowProps) {
+  const lastConsulta = dateMode === "lastConsulta" ? lastConsultaAt(patientConsultas) : null;
+  const dateLabel =
+    dateMode === "lastConsulta"
+      ? lastConsulta !== null
+        ? `Última consulta ${new Date(lastConsulta).toLocaleDateString("pt-BR")}`
+        : "Sem consultas"
+      : new Date(patient.updatedAt).toLocaleDateString("pt-BR");
   return (
     <>
       <div
@@ -665,7 +735,7 @@ function PatientRow({
                 {patient.name || "Sem nome"}
               </div>
               <div className="text-2xs text-slate-400 dark:text-slate-500">
-                {new Date(patient.updatedAt).toLocaleDateString("pt-BR")}
+                {dateLabel}
                 {patient.profile?.age && ` • ${patient.profile.age} anos`}
                 {patientConsultas.length > 0 && (
                   <span className="ml-1 text-emerald-500 dark:text-emerald-400">
