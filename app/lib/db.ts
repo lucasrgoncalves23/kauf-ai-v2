@@ -9,6 +9,7 @@ import { neon } from "@neondatabase/serverless";
 import type {
   PatientRecord,
   Consulta,
+  ConsultaSummary,
   ClinicalData,
   ClinicalOutputs,
   PatientProfile,
@@ -933,25 +934,31 @@ export async function getConsultas(patientId: string): Promise<Consulta[]> {
   }));
 }
 
-export async function getAllConsultas(): Promise<Consulta[]> {
+/** Every consulta across all patients, without the inputs/outputs snapshots (sidebar listing). */
+export async function getAllConsultaSummaries(): Promise<ConsultaSummary[]> {
   const sql = getDb();
 
   const rows = await sql`
     SELECT
       id, patient_id as "patientId", timestamp,
-      inputs, outputs, engine_status as "engineStatus", notes
+      engine_status as "engineStatus", notes,
+      coalesce(outputs->>'analise', '') <> '' as "hasAnalise",
+      coalesce(outputs->>'conduta', '') <> '' as "hasConduta",
+      coalesce(outputs->>'receita', '') <> '' as "hasReceita"
     FROM consultas
     ORDER BY timestamp DESC
   `;
 
   return rows.map((row) => ({
+    summary: true,
     id: row.id,
     patientId: row.patientId,
     timestamp: row.timestamp instanceof Date ? row.timestamp.toISOString() : row.timestamp,
-    inputs: row.inputs as ClinicalData,
-    outputs: row.outputs as ClinicalOutputs,
     engineStatus: row.engineStatus as EngineStatus,
     notes: row.notes || "",
+    hasAnalise: !!row.hasAnalise,
+    hasConduta: !!row.hasConduta,
+    hasReceita: !!row.hasReceita,
   }));
 }
 

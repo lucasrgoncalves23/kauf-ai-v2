@@ -1,9 +1,9 @@
-import type { Consulta, PatientRecord } from "../types/clinical";
+import type { ConsultaEntry, PatientRecord } from "../types/clinical";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Epoch ms of the most recent consulta, or null when the patient has none. */
-export function lastConsultaAt(consultas: Consulta[] | undefined): number | null {
+export function lastConsultaAt(consultas: ConsultaEntry[] | undefined): number | null {
   if (!consultas || consultas.length === 0) return null;
   let latest: number | null = null;
   for (const c of consultas) {
@@ -44,7 +44,7 @@ function bucketFor(last: number, now: number): keyof typeof RECENCY_LABELS {
  */
 export function groupByLastConsulta(
   patients: PatientRecord[],
-  consultasMap: Record<string, Consulta[]>,
+  consultasMap: Record<string, ConsultaEntry[]>,
   now: number = Date.now()
 ): RecencyBucket[] {
   const stamped = patients.map((p) => ({ p, last: lastConsultaAt(consultasMap[p.id]) }));

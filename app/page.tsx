@@ -21,11 +21,13 @@ import type {
   PatientRecord,
   PatientProfile,
   Consulta,
+  ConsultaEntry,
   ToastState,
 } from "./types/clinical";
 import { DEFAULT_SETTINGS } from "./types/clinical";
 import { createBlankPatient } from "./utils/patient";
 import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-client";
+import { isFullConsulta } from "./lib/consultaSummary";
 
 // --- COMPONENT IMPORTS ---
 import { TrendingUp, Columns3 } from "lucide-react";
@@ -131,7 +133,12 @@ export default function Home() {
   }, []);
 
   // --- CONSULTA STATE ---
-  const [consultasMap, setConsultasMap] = useState<Record<string, Consulta[]>>({});
+  // Summaries for every patient (sidebar), full snapshots only for the open patient
+  const [consultasMap, setConsultasMap] = useState<Record<string, ConsultaEntry[]>>({});
+  const currentPatientIdRef = useRef(currentPatientId);
+  useEffect(() => {
+    currentPatientIdRef.current = currentPatientId;
+  }, [currentPatientId]);
   const [isSavingConsulta, setIsSavingConsulta] = useState(false);
 
   const handleSaveConsulta = useCallback(async () => {
@@ -201,7 +208,7 @@ export default function Home() {
     });
   }, [setPatients]);
 
-  // Load all consultas on startup
+  // Load consulta summaries for all patients on startup
   const [consultasLoaded, setConsultasLoaded] = useState(false);
   useEffect(() => {
     if (consultasLoaded) return;
@@ -213,16 +220,28 @@ export default function Home() {
     }).catch(() => setConsultasLoaded(true));
   }, [consultasLoaded]);
 
-  // Fallback: load per-patient if batch failed
+  // Load the full snapshots for the open patient (also covers a failed batch load)
+  const fullConsultasRequestedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!consultasLoaded || !currentPatientId) return;
-    if (consultasMap[currentPatientId]) return;
+    const entries = consultasMap[currentPatientId];
+    if (entries && entries.every(isFullConsulta)) return;
+    if (fullConsultasRequestedRef.current.has(currentPatientId)) return;
+    fullConsultasRequestedRef.current.add(currentPatientId);
     fetchConsultas(currentPatientId).then(consultas => {
       if (consultas.length > 0) {
         setConsultasMap(prev => ({ ...prev, [currentPatientId]: consultas }));
+      } else {
+        // Nothing saved, or the request failed: allow a retry later
+        fullConsultasRequestedRef.current.delete(currentPatientId);
       }
     });
   }, [currentPatientId, consultasLoaded, consultasMap]);
+
+  const currentConsultas = useMemo<Consulta[]>(
+    () => (currentPatientId ? (consultasMap[currentPatientId] || []).filter(isFullConsulta) : []),
+    [consultasMap, currentPatientId]
+  );
 
   // --- HOOKS ---
   const { updateEngineStatus } = useEngineStatus(inputs, settings, setEngineStatus);
@@ -252,17 +271,34 @@ export default function Home() {
     { setPatients, setCurrentPatientId, setInputs, setOutputs, setPatientProfile, setChatMessages, setEngineStatus, setToast }
   );
 
-  const handleLoadConsulta = useCallback((consulta: Consulta) => {
+  const handleLoadConsulta = useCallback(async (entry: ConsultaEntry) => {
     // Always load a consulta into its own patient's chart — switching first
     // prevents autosave from writing one patient's data into another's record
-    if (consulta.patientId !== currentPatientId) {
-      const target = patients[consulta.patientId];
+    if (entry.patientId !== currentPatientId) {
+      const target = patients[entry.patientId];
       if (!target || target.deletedAt) {
         setToast({ message: "Paciente desta consulta não está ativo", type: "error" });
         return;
       }
-      handleSwitchPatient(consulta.patientId);
+      handleSwitchPatient(entry.patientId);
     }
+
+    // Sidebar rows for other patients are summaries; fetch the snapshot on demand
+    let consulta: Consulta | undefined = isFullConsulta(entry) ? entry : undefined;
+    if (!consulta) {
+      const full = await fetchConsultas(entry.patientId);
+      if (full.length > 0) {
+        setConsultasMap(prev => ({ ...prev, [entry.patientId]: full }));
+      }
+      consulta = full.find(c => c.id === entry.id);
+      if (!consulta) {
+        setToast({ message: "Não foi possível carregar a consulta", type: "error" });
+        return;
+      }
+      // The doctor may have opened another patient while the snapshot was loading
+      if (currentPatientIdRef.current !== entry.patientId) return;
+    }
+
     setInputs(consulta.inputs);
     setOutputs(consulta.outputs);
     if (consulta.engineStatus) setEngineStatus(consulta.engineStatus);
@@ -435,7 +471,7 @@ export default function Home() {
                 <PatientSnapshot profile={patientProfile} onProfileChange={setPatientProfile} />
                 <DataSourcesStatus inputs={inputs} />
                 <ConsultaHistory
-                  consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+                  consultas={currentConsultas}
                   onLoadConsulta={handleLoadConsulta}
                 />
                 <button
@@ -457,7 +493,7 @@ export default function Home() {
                   </span>
                 </button>
                 <SmartFollowUp
-                  consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+                  consultas={currentConsultas}
                   currentInputs={inputs}
                   engineStatus={engineStatus}
                 />
@@ -465,7 +501,7 @@ export default function Home() {
                   patientId={currentPatientId}
                   profile={patientProfile}
                   outputs={outputs}
-                  consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+                  consultas={currentConsultas}
                   onSaveConsulta={handleSaveConsulta}
                   isSavingConsulta={isSavingConsulta}
                   setToast={setToast}
@@ -623,7 +659,7 @@ export default function Home() {
             <LabTrendsModal
               isOpen={showLabTrends}
               onClose={() => setShowLabTrends(false)}
-              consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+              consultas={currentConsultas}
               currentLabText={inputs.laboratoriais}
               currentInputs={inputs}
               patientName={patientProfile.name}
@@ -634,7 +670,7 @@ export default function Home() {
             <ConsultaCompareModal
               isOpen={showCompare}
               onClose={() => setShowCompare(false)}
-              consultas={currentPatientId ? (consultasMap[currentPatientId] || []) : []}
+              consultas={currentConsultas}
               currentInputs={inputs}
               currentOutputs={outputs}
               patientName={patientProfile.name}

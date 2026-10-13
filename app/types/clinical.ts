@@ -156,6 +156,25 @@ export type Consulta = {
   notes: string;
 };
 
+/**
+ * What the sidebar needs to list a consulta, without the inputs/outputs snapshot.
+ * The full history is only loaded for the patient currently open; keeping every
+ * patient's snapshots in the tab made it heavy enough for Safari to kill it.
+ */
+export type ConsultaSummary = {
+  summary: true;
+  id: string;
+  patientId: string;
+  timestamp: string;
+  engineStatus: EngineStatus;
+  notes: string;
+  hasAnalise: boolean;
+  hasConduta: boolean;
+  hasReceita: boolean;
+};
+
+export type ConsultaEntry = Consulta | ConsultaSummary;
+
 // --- TOAST TYPES ---
 
 export type ToastType = "success" | "error" | "info";

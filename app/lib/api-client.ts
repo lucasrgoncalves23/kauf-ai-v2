@@ -5,7 +5,7 @@
  * Includes localStorage fallback for offline mode or when database is not configured.
  */
 
-import type { PatientRecord, Consulta } from "../types/clinical";
+import type { PatientRecord, Consulta, ConsultaSummary } from "../types/clinical";
 import { logger } from "./logger";
 
 // Get PIN from localStorage (set by user in settings)
@@ -81,10 +81,28 @@ export async function fetchAllPatients(): Promise<{
     }
   }
 
-  // Fallback to localStorage
+  // Fallback to localStorage. The full mirror is only rewritten on structural changes
+  // (create/trash/restore); edits go to the per-patient session cache, so overlay it.
   const stored = localStorage.getItem("kai-patients");
   if (stored) {
-    return { patients: JSON.parse(stored), fromDatabase: false };
+    const patients: Record<string, PatientRecord> = JSON.parse(stored);
+    try {
+      const session = JSON.parse(localStorage.getItem("kai-session") || "null");
+      const id = session?.patientId;
+      if (id && patients[id]) {
+        patients[id] = {
+          ...patients[id],
+          inputs: session.inputs ?? patients[id].inputs,
+          outputs: session.outputs ?? patients[id].outputs,
+          profile: session.patientProfile ?? patients[id].profile,
+          chatMessages: session.chatMessages ?? patients[id].chatMessages,
+          engineStatus: session.engineStatus ?? patients[id].engineStatus,
+        };
+      }
+    } catch {
+      /* stale cache, ignore */
+    }
+    return { patients, fromDatabase: false };
   }
 
   return { patients: {}, fromDatabase: false };
@@ -186,7 +204,7 @@ export async function deletePatientFromStorage(id: string): Promise<{
 
 // --- CONSULTA Functions ---
 
-export async function fetchAllConsultas(): Promise<Record<string, Consulta[]>> {
+export async function fetchAllConsultas(): Promise<Record<string, ConsultaSummary[]>> {
   try {
     const response = await fetch("/api/consultas", {
       method: "GET",
@@ -195,9 +213,9 @@ export async function fetchAllConsultas(): Promise<Record<string, Consulta[]>> {
 
     if (response.ok) {
       const data = await response.json();
-      const consultas: Consulta[] = data.consultas || [];
+      const consultas: ConsultaSummary[] = data.consultas || [];
       // Group by patientId
-      const grouped: Record<string, Consulta[]> = {};
+      const grouped: Record<string, ConsultaSummary[]> = {};
       for (const c of consultas) {
         if (!grouped[c.patientId]) grouped[c.patientId] = [];
         grouped[c.patientId].push(c);

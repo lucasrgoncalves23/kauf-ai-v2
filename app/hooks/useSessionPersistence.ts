@@ -38,6 +38,25 @@ type SessionActions = {
   setSettings: React.Dispatch<React.SetStateAction<Settings>>;
 };
 
+/** Per-patient cache of the open chart ("kai-session"); read back by the offline fallback. */
+function writeSessionCache(patient: PatientRecord): void {
+  try {
+    localStorage.setItem(
+      "kai-session",
+      JSON.stringify({
+        patientId: patient.id,
+        inputs: patient.inputs,
+        outputs: patient.outputs,
+        patientProfile: patient.profile,
+        chatMessages: patient.chatMessages,
+        engineStatus: patient.engineStatus,
+      })
+    );
+  } catch (e) {
+    logger.error("Failed to save to localStorage", { error: String(e) });
+  }
+}
+
 /**
  * Hook that handles data persistence for the session.
  * - Tries to load from database first, falls back to localStorage
@@ -55,7 +74,6 @@ export function useSessionPersistence(
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSaveRef = useRef<PatientRecord | null>(null);
-  const patientsRef = useRef<Record<string, PatientRecord>>({});
 
   const {
     inputs,
@@ -149,25 +167,10 @@ export function useSessionPersistence(
   // --- Debounced save function ---
   const debouncedSave = useCallback(
     async (updatedPatient: PatientRecord) => {
-      // Always save to localStorage immediately
-      try {
-        const updatedPatients = { ...patients, [updatedPatient.id]: updatedPatient };
-        localStorage.setItem("kai-patients", JSON.stringify(updatedPatients));
-
-        // Also save in old format for backwards compatibility
-        localStorage.setItem(
-          "kai-session",
-          JSON.stringify({
-            inputs: updatedPatient.inputs,
-            outputs: updatedPatient.outputs,
-            patientProfile: updatedPatient.profile,
-            chatMessages: updatedPatient.chatMessages,
-            engineStatus: updatedPatient.engineStatus,
-          })
-        );
-      } catch (e) {
-        logger.error("Failed to save to localStorage", { error: String(e) });
-      }
+      // Cache the open patient locally first (small write; the full "kai-patients"
+      // mirror is only rewritten on structural changes — re-serialising every patient
+      // on each keystroke is what made the tab heavy)
+      writeSessionCache(updatedPatient);
 
       // Try to save to database (non-blocking)
       try {
@@ -181,7 +184,7 @@ export function useSessionPersistence(
         logger.warn("Failed to save to database", { error: String(e) });
       }
     },
-    [patients, usingDatabase]
+    [usingDatabase]
   );
 
   // --- Save current patient on change (debounced) ---
@@ -234,10 +237,6 @@ export function useSessionPersistence(
 
   // --- Flush pending save when the tab closes or is hidden ---
   useEffect(() => {
-    patientsRef.current = patients;
-  }, [patients]);
-
-  useEffect(() => {
     const flushPendingSave = () => {
       const pending = pendingSaveRef.current;
       if (!pending) return;
@@ -245,12 +244,7 @@ export function useSessionPersistence(
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
       // localStorage write is synchronous — survives unload
-      try {
-        const updatedPatients = { ...patientsRef.current, [pending.id]: pending };
-        localStorage.setItem("kai-patients", JSON.stringify(updatedPatients));
-      } catch {
-        /* ignore */
-      }
+      writeSessionCache(pending);
 
       // keepalive lets the request outlive the page (best-effort)
       try {
