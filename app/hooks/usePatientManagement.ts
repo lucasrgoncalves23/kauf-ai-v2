@@ -248,6 +248,22 @@ export function usePatientManagement(
     setToast({ message: "Paciente excluido permanentemente", type: "info" });
   }, [setPatients, setToast, syncToLocalStorage]);
 
+  const handlePermanentDeleteAll = useCallback(() => {
+    const trashed = Object.values(patients).filter(p => !!p.deletedAt);
+    if (trashed.length === 0) return;
+
+    setPatients(prev => {
+      const next = { ...prev };
+      for (const p of trashed) delete next[p.id];
+      syncToLocalStorage(next);
+      return next;
+    });
+
+    for (const p of trashed) deletePatientFromStorage(p.id);
+
+    setToast({ message: `${trashed.length} paciente${trashed.length !== 1 ? "s" : ""} excluído${trashed.length !== 1 ? "s" : ""} permanentemente`, type: "info" });
+  }, [patients, setPatients, setToast, syncToLocalStorage]);
+
   const handleStartRename = useCallback((patientId: string) => {
     const patient = patients[patientId];
     if (!patient) return;
@@ -305,6 +321,7 @@ export function usePatientManagement(
     handleUndoTrash,
     handleRestorePatient,
     handlePermanentDelete,
+    handlePermanentDeleteAll,
     handleStartRename,
     handleSaveRename,
     handleCancelRename,

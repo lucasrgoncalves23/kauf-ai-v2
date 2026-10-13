@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 // --- LIB IMPORTS ---
 import { extractDemographics } from "./lib/extraction";
@@ -246,7 +246,7 @@ export default function Home() {
     handleCreateNewPatient, handleSwitchPatient, handleDeletePatient,
     handleStartRename, handleSaveRename, handleCancelRename,
     sortedTrashedPatients, trashBanner, handleUndoTrash,
-    handleRestorePatient, handlePermanentDelete,
+    handleRestorePatient, handlePermanentDelete, handlePermanentDeleteAll,
   } = usePatientManagement(
     { patients, currentPatientId },
     { setPatients, setCurrentPatientId, setInputs, setOutputs, setPatientProfile, setChatMessages, setEngineStatus, setToast }
@@ -425,6 +425,7 @@ export default function Home() {
                   trashedPatients={sortedTrashedPatients}
                   onRestorePatient={handleRestorePatient}
                   onPermanentDelete={handlePermanentDelete}
+                  onPermanentDeleteAll={handlePermanentDeleteAll}
                 />
                 <CrmPanel
                   onSelectPatient={(kaufId) => {
