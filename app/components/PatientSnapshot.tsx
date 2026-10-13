@@ -16,7 +16,25 @@ const inputClass =
 const labelClass =
   "block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1 font-semibold";
 
+function ageFromBirthDate(raw: string, today: Date = new Date()): string | null {
+  const m = raw.trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  let year = Number(m[3]);
+  if (m[3].length === 2) year += year > today.getFullYear() % 100 ? 1900 : 2000;
+  const birth = new Date(year, month - 1, day);
+  if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) return null;
+  if (birth > today) return null;
+  let age = today.getFullYear() - year;
+  const monthDiff = today.getMonth() - (month - 1);
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < day)) age--;
+  return String(age);
+}
+
 export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotProps) {
+  const derivedAge = ageFromBirthDate(profile.birthDate);
+
   return (
     <>
       <SectionLabel>Paciente</SectionLabel>
@@ -32,12 +50,15 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
         </div>
         <div className="grid grid-cols-2 gap-3 compact:gap-2">
           <div>
-            <label className={labelClass}>Idade</label>
+            <label className={labelClass}>Data Nasc.</label>
             <input
               className={inputClass}
-              placeholder="--"
-              value={profile.age}
-              onChange={(e) => onProfileChange({ ...profile, age: e.target.value })}
+              placeholder="DD/MM/AAAA"
+              value={profile.birthDate}
+              onChange={(e) => {
+                const birthDate = e.target.value;
+                onProfileChange({ ...profile, birthDate, age: ageFromBirthDate(birthDate) ?? "" });
+              }}
             />
           </div>
           <div>
@@ -55,12 +76,13 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
         </div>
         <div className="grid grid-cols-2 gap-3 compact:gap-2">
           <div>
-            <label className={labelClass}>Data Nasc.</label>
+            <label className={labelClass}>Idade</label>
             <input
-              className={inputClass}
-              placeholder="DD/MM/AAAA"
-              value={profile.birthDate}
-              onChange={(e) => onProfileChange({ ...profile, birthDate: e.target.value })}
+              className={`${inputClass} bg-slate-100/60 dark:bg-slate-800/60 cursor-not-allowed text-slate-500 dark:text-slate-400`}
+              placeholder="--"
+              value={derivedAge ?? profile.age}
+              readOnly
+              tabIndex={-1}
             />
           </div>
           <div>
