@@ -11,6 +11,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Kauf AI",
   description: "Clinical Cognition Engine",
+  applicationName: "Kaufmann AI",
+  icons: { apple: "/apple-touch-icon.png" },
+  // Standalone window when installed via Safari "Add to Dock" / iOS "Add to Home Screen"
+  appleWebApp: { capable: true, title: "Kaufmann AI", statusBarStyle: "default" },
 };
 
 export default function RootLayout({

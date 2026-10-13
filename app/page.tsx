@@ -28,6 +28,7 @@ import { DEFAULT_SETTINGS } from "./types/clinical";
 import { createBlankPatient } from "./utils/patient";
 import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-client";
 import { isFullConsulta } from "./lib/consultaSummary";
+import { useUnloadGuard } from "./hooks/useUnloadGuard";
 
 // --- COMPONENT IMPORTS ---
 import { TrendingUp, Columns3 } from "lucide-react";
@@ -334,6 +335,11 @@ export default function Home() {
   } = useExportHandlers({
     outputs, currentPatientId, patientName: patientProfile.name, patientSex: patientProfile.sex, setToast,
   });
+
+  // Ask before the tab closes/reloads while a generation, import or PDF build is running
+  useUnloadGuard(
+    isRunningAnalise || isRunningConduta || isRunningReceita || !!loadingImport || isGeneratingPatientPdf
+  );
 
   // --- EFFECTS ---
   useEffect(() => {
