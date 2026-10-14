@@ -69,13 +69,13 @@ export function HeaderBar({
         <img
           src="/ik-logo.png"
           alt="Instituto Kaufmann"
-          className="w-auto shrink-0 block dark:hidden h-20 compact:h-14"
+          className="w-auto min-w-0 object-contain block dark:hidden h-20 compact:h-14"
         />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/ik-logo-white.png"
           alt="Instituto Kaufmann"
-          className="w-auto shrink-0 hidden dark:block h-20 compact:h-14"
+          className="w-auto min-w-0 object-contain hidden dark:block h-20 compact:h-14"
         />
         {statusUi && (
           <div
