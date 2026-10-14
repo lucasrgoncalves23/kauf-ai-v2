@@ -7,6 +7,8 @@ import {
   PanelRightOpen,
   Save,
   ChevronDown,
+  Download,
+  Eraser,
   Settings,
 } from "lucide-react";
 import { Spinner } from "./ui";
@@ -54,7 +56,7 @@ export function HeaderBar({
 }: HeaderBarProps) {
   const statusUi = saveStatus ? SAVE_STATUS_UI[saveStatus] : null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 compact:gap-x-4 compact:gap-y-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm print:hidden transition-colors duration-300 px-8 py-7 mb-6 compact:px-5 compact:py-4 compact:mb-3">
+    <div className="@container flex items-center justify-between gap-8 compact:gap-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm print:hidden transition-colors duration-300 px-8 py-7 mb-6 compact:px-5 compact:py-4 compact:mb-3">
       <div className="flex items-center gap-4 compact:gap-3 min-w-0">
         {onToggleLeft && (
           <button
@@ -87,32 +89,39 @@ export function HeaderBar({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0 ml-auto">
+      <div className="flex items-center gap-2 shrink-0">
         {onSaveConsulta && (
           <button
             onClick={onSaveConsulta}
             disabled={isSavingConsulta}
-            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+            title="Salvar consulta"
+            aria-label="Salvar consulta"
+            className={`flex items-center gap-1.5 px-3 @min-[1000px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
               isSavingConsulta
                 ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-400 cursor-wait"
                 : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800"
             }`}
           >
             {isSavingConsulta ? <Spinner /> : <Save className="w-3.5 h-3.5" />}
-            Salvar consulta
+            <span className="hidden @min-[1000px]:inline">Salvar consulta</span>
           </button>
         )}
         <button
           onClick={onClearSession}
-          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-4 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+          title="Limpar sessão"
+          aria-label="Limpar sessão"
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-3 @min-[1000px]:px-4 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
         >
-          Limpar sessão
+          <Eraser className="w-3.5 h-3.5 @min-[1000px]:hidden" />
+          <span className="hidden @min-[1000px]:inline">Limpar sessão</span>
         </button>
         <div className="relative">
           <button
             onClick={onToggleExportDropdown}
             disabled={isGeneratingPatientPdf}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-lg shadow-slate-200 dark:shadow-slate-900/30 ${
+            title="Exportar PDF"
+            aria-label="Exportar PDF"
+            className={`flex items-center gap-2 px-3 @min-[1000px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-lg shadow-slate-200 dark:shadow-slate-900/30 ${
               isGeneratingPatientPdf
                 ? "bg-slate-300 text-slate-500 cursor-wait"
                 : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-white"
@@ -121,12 +130,13 @@ export function HeaderBar({
             {isGeneratingPatientPdf ? (
               <>
                 <Spinner />
-                <span>Gerando...</span>
+                <span className="hidden @min-[1000px]:inline">Gerando...</span>
               </>
             ) : (
               <>
-                <span>Exportar PDF</span>
-                <ChevronDown className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 @min-[1000px]:hidden" />
+                <span className="hidden @min-[1000px]:inline">Exportar PDF</span>
+                <ChevronDown className="hidden @min-[1000px]:block w-3.5 h-3.5" />
               </>
             )}
           </button>
