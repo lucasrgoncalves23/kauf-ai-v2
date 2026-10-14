@@ -54,7 +54,7 @@ export function HeaderBar({
 }: HeaderBarProps) {
   const statusUi = saveStatus ? SAVE_STATUS_UI[saveStatus] : null;
   return (
-    <div className="flex items-center justify-between gap-8 compact:gap-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm print:hidden transition-colors duration-300 px-8 py-7 mb-6 compact:px-5 compact:py-4 compact:mb-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 compact:gap-x-4 compact:gap-y-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm print:hidden transition-colors duration-300 px-8 py-7 mb-6 compact:px-5 compact:py-4 compact:mb-3">
       <div className="flex items-center gap-4 compact:gap-3 min-w-0">
         {onToggleLeft && (
           <button
@@ -69,13 +69,13 @@ export function HeaderBar({
         <img
           src="/ik-logo.png"
           alt="Instituto Kaufmann"
-          className="w-auto min-w-0 object-contain block dark:hidden h-20 compact:h-14"
+          className="w-auto shrink-0 block dark:hidden h-20 compact:h-14"
         />
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/ik-logo-white.png"
           alt="Instituto Kaufmann"
-          className="w-auto min-w-0 object-contain hidden dark:block h-20 compact:h-14"
+          className="w-auto shrink-0 hidden dark:block h-20 compact:h-14"
         />
         {statusUi && (
           <div
@@ -87,7 +87,7 @@ export function HeaderBar({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 ml-auto">
         {onSaveConsulta && (
           <button
             onClick={onSaveConsulta}
