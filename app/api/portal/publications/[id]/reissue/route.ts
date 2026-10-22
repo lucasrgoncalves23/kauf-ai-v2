@@ -26,6 +26,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Esta publicação foi revogada ou expirou. Publique novamente." }, { status: 409 });
     }
 
+    const signature = previous.payload.signature;
     const now = new Date();
     const expiresAt = expiryFrom(now);
     const token = newToken();
@@ -39,6 +40,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       payload: { ...previous.payload, expiresAt },
       doctorConfirmedAt: previous.doctorConfirmedAt || now.toISOString(),
       expiresAt,
+      // Same content, so the signature carries over (its hash excludes the expiry)
+      signature: signature ? { signedBy: signature.signer, signedAt: signature.signedAt, payloadHash: signature.hash } : null,
     });
 
     return NextResponse.json({ id: created.id, token, expiresAt }, { headers: { "Cache-Control": "no-store" } });

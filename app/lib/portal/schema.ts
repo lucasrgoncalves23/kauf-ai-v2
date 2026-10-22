@@ -132,7 +132,23 @@ export function portalContentJsonSchema(): Record<string, unknown> {
 type Raw = Record<string, unknown>;
 const obj = (v: unknown): Raw => (v && typeof v === "object" && !Array.isArray(v) ? (v as Raw) : {});
 const arr = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice(0, max) : []);
-const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+/**
+ * Fits text into `max` characters without cutting mid-word: ends at the last complete sentence
+ * when one ends reasonably late, otherwise at the last whole word with an ellipsis.
+ */
+export function clipText(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  const head = t.slice(0, max);
+  const sentenceEnd = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "), /[.!?]$/.test(head) ? max - 1 : -1);
+  if (sentenceEnd >= max * 0.4) return head.slice(0, sentenceEnd + 1).trim();
+  // Leave one character for the ellipsis
+  const space = t.slice(0, max - 1).lastIndexOf(" ");
+  const cut = space > 0 ? space : max - 1;
+  return `${t.slice(0, cut).replace(/[\s,;:–—-]+$/, "")}…`;
+}
+
+const str = (v: unknown, max: number): string => (typeof v === "string" ? clipText(v, max) : "");
 const optStr = (v: unknown, max: number): string | undefined => str(v, max) || undefined;
 const strList = (v: unknown, maxItems: number, maxLen: number, minLen = 1): string[] =>
   arr(v, maxItems)
@@ -210,4 +226,35 @@ export function flattenContentText(content: PortalContent): string {
     content.treino?.introducao ?? ""
   );
   return parts.filter(Boolean).join("\n");
+}
+
+// ---------- Doctor-requested revisions (copilot) ----------
+
+export const CONTENT_KEYS = ["resumo", "modulos", "medicamentos", "exames", "proximosPassos", "dieta", "treino"] as const;
+export type ContentKey = (typeof CONTENT_KEYS)[number];
+
+export const CONTENT_KEY_LABELS: Record<ContentKey, string> = {
+  resumo: "Resumo",
+  modulos: "Dia a dia",
+  medicamentos: "Observações dos medicamentos",
+  exames: "Exames",
+  proximosPassos: "Próximos passos",
+  dieta: "Introdução da alimentação",
+  treino: "Introdução do treino",
+};
+
+export const portalReviseSchema = z.object({
+  pergunta: z
+    .string()
+    .max(400)
+    .optional()
+    .describe("Só quando o pedido é vago ou não pode ser feito aqui: pergunta curta ao médico. Nesse caso não devolva alteracoes."),
+  resumoDaAlteracao: z.string().max(300).describe("Uma frase para o médico dizendo o que mudou."),
+  alteracoes: portalContentSchema.partial().optional().describe("Somente as seções de nível superior que mudaram, cada uma completa."),
+});
+
+export function portalReviseJsonSchema(): Record<string, unknown> {
+  const { $schema: _omit, ...schema } = z.toJSONSchema(portalReviseSchema) as Record<string, unknown>;
+  void _omit;
+  return schema;
 }

@@ -5,14 +5,16 @@ import { cachedSystem, getAnthropicClient, MODEL } from "@/app/lib/anthropic";
 import { buildPortalContentPrompt } from "@/app/lib/prompts";
 import { logger } from "@/app/lib/logger";
 import { parsePortalContent, portalContentJsonSchema } from "@/app/lib/portal/schema";
+import { alignMedicationNotes } from "@/app/lib/portal/payload";
+import { signingPinRequired } from "@/app/lib/portal/signature";
 import {
   assemblePayload,
   checkRules,
   deriveParts,
   expiryFrom,
-  labSummaryForPrompt,
   loadPublishContext,
   PortalPublishError,
+  portalPromptInput,
   validateContent,
 } from "@/app/lib/portal/assemble";
 
@@ -42,22 +44,7 @@ export async function POST(req: Request) {
       throw new PortalPublishError(`Bloqueado pelas regras clínicas: ${sourceViolations.join(", ")}.`, 422);
     }
 
-    const { system, user } = buildPortalContentPrompt({
-      firstName: context.firstName,
-      sex: context.sex,
-      age: context.age,
-      phase: context.consulta.engineStatus?.phase,
-      analise: parts.analise,
-      condutaSemPlanos: parts.condutaSemPlanos,
-      receita: parts.receita,
-      parsedMedications: parts.parsedMedications,
-      labSummary: labSummaryForPrompt(context.labSeries),
-      nextVisitLabel: context.followUp.interval.label,
-      nextVisitReason: context.followUp.interval.reason,
-      suggestedLabs: context.followUp.suggestedLabs.map((l) => l.marker),
-      hasDieta: Boolean(parts.dieta),
-      hasTreino: Boolean(parts.treino),
-    });
+    const { system, user } = buildPortalContentPrompt(portalPromptInput(context, parts));
 
     const stream = client.messages.stream(
       {
@@ -100,7 +87,10 @@ export async function POST(req: Request) {
       expiresAt: expiryFrom(now),
     });
 
-    return NextResponse.json({ content, payload }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { content: alignMedicationNotes(content, payload.medicamentos), payload, signingPinRequired: signingPinRequired() },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     if (err instanceof PortalPublishError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

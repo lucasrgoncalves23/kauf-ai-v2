@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LogOut, Printer, ShieldCheck } from "lucide-react";
-import type { PortalPayload } from "../../lib/portal/payload";
+import type { PortalPayload, PortalSignature } from "../../lib/portal/payload";
 import { useChecklist } from "./useChecklist";
 import {
   DiaADiaSection,
@@ -14,13 +14,30 @@ import {
   formatLongDate,
 } from "./sections";
 
+// Sticky section nav height (matches the sections' scroll-mt-16)
+const NAV_OFFSET = 64;
+
+/**
+ * Scrolls without touching the URL: on the real portal the hash holds the access token (a
+ * "#treino" link would replace it), and in the doctor's preview the page lives in an srcdoc
+ * iframe where "#treino" resolves against the dashboard URL and loads the dashboard instead.
+ */
+function scrollToSection(doc: Document, id: string) {
+  const win = doc.defaultView;
+  const el = doc.getElementById(id);
+  if (!win || !el) return;
+  win.scrollTo({ top: el.getBoundingClientRect().top + win.scrollY - NAV_OFFSET, behavior: "smooth" });
+}
+
 type PortalReportProps = {
   payload: PortalPayload;
   onExit?: () => void;
   preview?: boolean;
+  /** Preview only: the doctor clicked inside a section (its id), to jump to the matching editor field */
+  onSectionClick?: (sectionId: string) => void;
 };
 
-export function PortalReport({ payload, onExit, preview = false }: PortalReportProps) {
+export function PortalReport({ payload, onExit, preview = false, onSectionClick }: PortalReportProps) {
   const checklist = useChecklist(preview ? null : `kai-portal-check:${payload.publishedAt}`);
   const [expandAll, setExpandAll] = useState(false);
 
@@ -72,18 +89,29 @@ export function PortalReport({ payload, onExit, preview = false }: PortalReportP
       <nav className="sticky top-0 z-10 border-y border-slate-100 bg-white/90 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-2xl gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none]">
           {nav.map((n) => (
-            <a
+            <button
               key={n.id}
-              href={`#${n.id}`}
+              type="button"
+              onClick={(e) => scrollToSection(e.currentTarget.ownerDocument, n.id)}
               className="shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
             >
               {n.label}
-            </a>
+            </button>
           ))}
         </div>
       </nav>
 
-      <main className="mx-auto max-w-2xl space-y-8 px-4 pt-6">
+      <main
+        className={`mx-auto max-w-2xl space-y-8 px-4 pt-6 ${onSectionClick ? "[&_section]:cursor-pointer [&_section]:rounded-2xl [&_section]:outline-offset-4 [&_section:hover]:outline [&_section:hover]:outline-2 [&_section:hover]:outline-brand-300" : ""}`}
+        onClick={
+          onSectionClick
+            ? (e) => {
+                const section = (e.target as HTMLElement).closest("section[id]");
+                if (section) onSectionClick(section.id);
+              }
+            : undefined
+        }
+      >
         <ResumoSection resumo={content.resumo} />
         {hasDiaADia && <DiaADiaSection modulos={content.modulos} checklist={checklist} />}
         {hasMeds && <MedicamentosSection medicamentos={payload.medicamentos} receitaOriginal={payload.receitaOriginal} expandAll={expandAll} />}
@@ -91,6 +119,8 @@ export function PortalReport({ payload, onExit, preview = false }: PortalReportP
         {schedules.treino && <ScheduleSection id="treino" title="Treino · exemplo para 30 dias" schedule={schedules.treino} expandAll={expandAll} />}
         <ExamesSection labSeries={payload.labSeries} exames={content.exames} />
         <ProximosPassosSection proximos={content.proximosPassos} nextVisit={payload.nextVisit} contactLine={payload.clinic.contactLine} />
+
+        {payload.signature ? <SignatureBlock signature={payload.signature} /> : preview && <SignaturePlaceholder doctor={payload.clinic.doctor} />}
 
         <footer className="border-t border-slate-200 pt-6 text-xs leading-relaxed text-slate-400">
           <div className="flex items-start gap-2">
@@ -106,12 +136,14 @@ export function PortalReport({ payload, onExit, preview = false }: PortalReportP
             conforme a LGPD; o acesso a este plano é registrado e pode ser desativado pela clínica a qualquer momento.
           </p>
           <div className="mt-5 flex flex-wrap gap-2 print:hidden">
-            <button
-              onClick={print}
-              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              <Printer className="h-4 w-4" /> Imprimir ou salvar em PDF
-            </button>
+            {!preview && (
+              <button
+                onClick={print}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Printer className="h-4 w-4" /> Imprimir ou salvar em PDF
+              </button>
+            )}
             {onExit && (
               <button onClick={onExit} className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100">
                 <LogOut className="h-4 w-4" /> Sair
@@ -121,5 +153,36 @@ export function PortalReport({ payload, onExit, preview = false }: PortalReportP
         </footer>
       </main>
     </div>
+  );
+}
+
+function SignatureBlock({ signature }: { signature: PortalSignature }) {
+  const when = new Date(signature.signedAt);
+  return (
+    <section id="assinatura" className="print:break-inside-avoid">
+      <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm print:border-slate-300 print:shadow-none">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={signature.image} alt={`Assinatura de ${signature.signer}`} className="h-16 w-auto max-w-full" />
+        <div className="mt-2 border-t border-slate-200 pt-2">
+          <p className="text-sm font-semibold text-slate-800">{signature.signer}</p>
+          <p className="text-xs text-slate-500">{signature.crm}</p>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-slate-400">
+          Assinado eletronicamente em {when.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} às{" "}
+          {when.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}. Código de verificação{" "}
+          <span className="font-mono font-semibold tracking-wide text-slate-500">{signature.code}</span>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function SignaturePlaceholder({ doctor }: { doctor: string }) {
+  return (
+    <section id="assinatura">
+      <div className="rounded-2xl border-2 border-dashed border-slate-200 p-5 text-center text-xs text-slate-400">
+        A assinatura eletrônica de {doctor} aparece aqui depois de assinar.
+      </div>
+    </section>
   );
 }

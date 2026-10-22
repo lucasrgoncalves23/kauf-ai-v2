@@ -570,7 +570,7 @@ export type PortalPromptInput = {
   hasTreino: boolean;
 };
 
-const PORTAL_SYSTEM = `Você escreve a versão do paciente de uma consulta de medicina integrativa, para um portal que o paciente abre no celular. Você fala em nome de ${PERSONA.split(",")[0]}.
+const PORTAL_RULES = `Você escreve a versão do paciente de uma consulta de medicina integrativa, para um portal que o paciente abre no celular. Você fala em nome de ${PERSONA.split(",")[0]}.
 
 O PACIENTE:
 - Não é médico. Não conhece siglas nem termos técnicos.
@@ -592,7 +592,9 @@ REGRAS OBRIGATÓRIAS DE SEGURANÇA:
 6. Preencha "dieta.introducao" somente se HÁ PLANO DE DIETA for sim, e "treino.introducao" somente se HÁ PLANO DE TREINO for sim. Os planos em si já serão mostrados ao paciente; escreva só uma introdução curta.
 7. Não mencione medicamentos controlados, hormônios ou peptídeos que não estejam na receita ou na conduta.
 8. Respeite o sexo biológico informado em todas as frases.
-9. O PRÓXIMO RETORNO é uma recomendação do médico, não um agendamento confirmado. Diga "recomendado" ou "sugerido", nunca "marcado" ou "agendado".
+9. O PRÓXIMO RETORNO é uma recomendação do médico, não um agendamento confirmado. Diga "recomendado" ou "sugerido", nunca "marcado" ou "agendado".`;
+
+const PORTAL_SYSTEM = `${PORTAL_RULES}
 
 Preencha todos os campos da ferramenta. Seja conciso: o resumo tem no máximo 6 frases, cada ação tem no máximo 20 palavras.`;
 
@@ -630,4 +632,43 @@ HÁ PLANO DE DIETA: ${input.hasDieta ? "sim" : "não"}
 HÁ PLANO DE TREINO: ${input.hasTreino ? "sim" : "não"}`;
 
   return { system: PORTAL_SYSTEM, user };
+}
+
+// ---------- Patient portal: doctor-requested revision ----------
+
+export type PortalReviseTurn = { role: "medico" | "ia"; text: string };
+
+const PORTAL_REVISE_TASK = `TAREFA AGORA: o médico revisou a versão do paciente e pediu uma alteração. Você recebe as fontes da consulta, o conteúdo atual (JSON) e o pedido.
+
+- Altere somente o que o pedido exige. Preserve todo o resto palavra por palavra.
+- Em "alteracoes", devolva apenas as seções de nível superior que mudaram, cada uma completa (ex.: para mudar uma ação de um módulo, devolva "modulos" inteiro, com os demais módulos iguais).
+- Em "resumoDaAlteracao", escreva uma frase curta para o médico dizendo o que mudou.
+- Se o pedido for vago a ponto de você precisar adivinhar o que mudar ou em que direção, NÃO altere nada: escreva em "pergunta" uma pergunta curta e objetiva e não devolva "alteracoes".
+- O que o paciente toma, as doses, os horários e os planos de 30 dias de dieta e treino vêm da receita e da conduta e não podem ser alterados aqui. Se o pedido exigir isso, não altere: diga em "pergunta" que a mudança deve ser feita na receita ou na conduta.
+- As regras de escrita e de segurança acima valem para todo texto novo, inclusive nunca escrever doses.`;
+
+export function buildPortalRevisePrompt(input: {
+  sources: PortalPromptInput;
+  content: unknown;
+  instruction: string;
+  scopeLabels: string[];
+  history: PortalReviseTurn[];
+}): { system: string; sources: string; user: string } {
+  const history = input.history.length
+    ? `=== CONVERSA ANTERIOR SOBRE ESTA VERSÃO ===\n${input.history.map((t) => `${t.role === "medico" ? "MÉDICO" : "IA"}: ${t.text}`).join("\n")}\n\n`
+    : "";
+  const scope = input.scopeLabels.length
+    ? `ESCOPO: altere somente ${input.scopeLabels.join(", ")}. Não devolva outras seções.\n\n`
+    : "";
+  const user = `=== CONTEÚDO ATUAL DA VERSÃO DO PACIENTE (JSON) ===
+${JSON.stringify(input.content, null, 1)}
+
+${history}${scope}=== PEDIDO DO MÉDICO ===
+${input.instruction}`;
+
+  return {
+    system: `${PORTAL_RULES}\n\n${PORTAL_REVISE_TASK}`,
+    sources: `=== FONTES DA CONSULTA ===\n${buildPortalContentPrompt(input.sources).user}`,
+    user,
+  };
 }

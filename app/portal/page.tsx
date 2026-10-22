@@ -10,10 +10,9 @@ type Phase =
   | { kind: "no_token" }
   | { kind: "gate"; error: string | null; loading: boolean }
   | { kind: "blocked"; message: string }
-  | { kind: "report"; payload: PortalPayload; preview: boolean };
+  | { kind: "report"; payload: PortalPayload };
 
 const HIDDEN_RELOCK_MS = 10 * 60 * 1000;
-const PREVIEW_MESSAGE = "kai-portal-preview";
 
 export default function PortalPage() {
   const [phase, setPhase] = useState<Phase>({ kind: "booting" });
@@ -21,26 +20,10 @@ export default function PortalPage() {
   const hiddenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const relock = useCallback(() => {
-    setPhase((p) => (p.kind === "report" && !p.preview ? { kind: "gate", error: null, loading: false } : p));
+    setPhase((p) => (p.kind === "report" ? { kind: "gate", error: null, loading: false } : p));
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const isPreview = params.get("preview") === "1" && window.parent !== window;
-
-    if (isPreview) {
-      const onMessage = (event: MessageEvent) => {
-        if (event.origin !== window.location.origin || event.source !== window.parent) return;
-        const data = event.data as { type?: string; payload?: PortalPayload } | null;
-        if (data?.type === PREVIEW_MESSAGE && data.payload) {
-          setPhase({ kind: "report", payload: data.payload, preview: true });
-        }
-      };
-      window.addEventListener("message", onMessage);
-      window.parent.postMessage({ type: `${PREVIEW_MESSAGE}-ready` }, window.location.origin);
-      return () => window.removeEventListener("message", onMessage);
-    }
-
     const token = window.location.hash.slice(1);
     tokenRef.current = token || null;
     // The token only exists in the browser (URL fragment), so it can't be read before mount
@@ -80,7 +63,7 @@ export default function PortalPage() {
       });
       const data = (await res.json().catch(() => ({}))) as { payload?: PortalPayload; error?: string; blocked?: boolean };
       if (res.ok && data.payload) {
-        setPhase({ kind: "report", payload: data.payload, preview: false });
+        setPhase({ kind: "report", payload: data.payload });
       } else if (data.blocked) {
         setPhase({ kind: "blocked", message: data.error || "Este link não está mais disponível." });
       } else {
@@ -112,5 +95,5 @@ export default function PortalPage() {
     return <CpfGate onSubmit={submit} loading={phase.loading} error={phase.error} />;
   }
 
-  return <PortalReport payload={phase.payload} preview={phase.preview} onExit={phase.preview ? undefined : relock} />;
+  return <PortalReport payload={phase.payload} onExit={relock} />;
 }

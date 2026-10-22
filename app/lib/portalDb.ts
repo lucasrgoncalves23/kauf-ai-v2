@@ -74,6 +74,10 @@ export function ensurePortalTables(): Promise<void> {
           )
         `
       );
+      // Simple electronic signature (added after launch; older rows stay unsigned)
+      await ddl(() => sql`ALTER TABLE portal_publications ADD COLUMN IF NOT EXISTS signed_by TEXT`);
+      await ddl(() => sql`ALTER TABLE portal_publications ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ`);
+      await ddl(() => sql`ALTER TABLE portal_publications ADD COLUMN IF NOT EXISTS payload_hash TEXT`);
       await ddl(
         () => sql`
           CREATE UNIQUE INDEX IF NOT EXISTS idx_portal_pub_one_active
@@ -157,6 +161,7 @@ export async function createPublication(input: {
   payload: PortalPayload;
   doctorConfirmedAt: string;
   expiresAt: string;
+  signature: { signedBy: string; signedAt: string; payloadHash: string } | null;
 }): Promise<{ id: string }> {
   await ensurePortalTables();
   const sql = getDb();
@@ -170,11 +175,12 @@ export async function createPublication(input: {
     sql`
       INSERT INTO portal_publications
         (id, patient_id, consulta_id, token_hash, token_enc, cpf_hmac, patient_first_name,
-         payload, status, doctor_confirmed_at, expires_at)
+         payload, status, doctor_confirmed_at, expires_at, signed_by, signed_at, payload_hash)
       VALUES
         (${id}, ${input.patientId}, ${input.consultaId}, ${input.tokenHash}, ${input.tokenEnc},
          ${input.cpfHmac}, ${input.patientFirstName}, ${jsonb(input.payload)}::jsonb, 'active',
-         ${input.doctorConfirmedAt}::timestamptz, ${input.expiresAt}::timestamptz)
+         ${input.doctorConfirmedAt}::timestamptz, ${input.expiresAt}::timestamptz,
+         ${input.signature?.signedBy ?? null}, ${input.signature?.signedAt ?? null}::timestamptz, ${input.signature?.payloadHash ?? null})
     `,
   ]);
   return { id };

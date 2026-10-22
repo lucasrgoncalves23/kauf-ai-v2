@@ -9,6 +9,7 @@ import { CLINIC, getClinicContactLine } from "../clinic";
 import { extractThirtyDayBlocks, parseCronograma, parseDays, parseReceitaItems, type ParsedMedication } from "./extract";
 import { flattenContentText, type PortalContent } from "./schema";
 import { unverifiedDoseMentions } from "./validate";
+import type { PortalPromptInput } from "../prompts";
 import { firstName, mergeMedications, toPortalLabSeries, type PortalPayload } from "./payload";
 
 export const PUBLICATION_DAYS = 90;
@@ -95,26 +96,33 @@ export function checkRules(parts: DerivedParts, content: PortalContent | null, s
   return [...seen];
 }
 
-/** Safety gate on AI content. Returns the content restricted to markers the patient actually has. */
-export function validateContent(raw: PortalContent, parts: DerivedParts, labSeries: LabSeries[], sex: string): PortalContent {
-  // Explanations for markers without results would never render; drop them rather than fail
+/** Explanations for markers without results would never render; drop them rather than fail. */
+export function restrictToKnownMarkers(content: PortalContent, labSeries: LabSeries[]): PortalContent {
   const known = new Set<string>(labSeries.map((s) => s.key));
-  const content: PortalContent = { ...raw, exames: raw.exames.filter((e) => known.has(e.marcador)) };
+  return { ...content, exames: content.exames.filter((e) => known.has(e.marcador)) };
+}
 
+/** Everything that would block publishing this content, as messages for the doctor. */
+export function contentIssues(content: PortalContent, parts: DerivedParts, sex: string): string[] {
+  const issues: string[] = [];
   const violations = checkRules(parts, content, sex);
-  if (violations.length) {
-    throw new PortalPublishError(`Bloqueado pelas regras clínicas: ${violations.join(", ")}.`, 422);
-  }
+  if (violations.length) issues.push(`Bloqueado pelas regras clínicas: ${violations.join(", ")}.`);
 
   const source = `${parts.receita}\n${parts.condutaSemPlanos}\n${parts.dieta ?? ""}\n${parts.treino ?? ""}`;
   const unverified = unverifiedDoseMentions(flattenContentText(content), source);
   if (unverified.length) {
-    throw new PortalPublishError(
-      `Bloqueado: o texto explicativo da IA citou doses que não estão escritas assim na receita/conduta (${unverified.join("; ")}). Gere novamente.`,
-      422
+    issues.push(
+      `O texto do paciente cita doses que não estão escritas assim na receita/conduta (${unverified.join("; ")}). Doses só aparecem pela receita: corrija o texto ou a receita.`
     );
   }
+  return issues;
+}
 
+/** Safety gate on the patient text (AI-written or edited). Returns the content restricted to markers the patient actually has. */
+export function validateContent(raw: PortalContent, parts: DerivedParts, labSeries: LabSeries[], sex: string): PortalContent {
+  const content = restrictToKnownMarkers(raw, labSeries);
+  const issues = contentIssues(content, parts, sex);
+  if (issues.length) throw new PortalPublishError(issues.join(" "), 422);
   return content;
 }
 
@@ -124,6 +132,8 @@ export function assemblePayload(input: {
   content: PortalContent;
   publishedAt: string;
   expiresAt: string;
+  /** Content came back from the editor (notes aligned per item), not straight from the model */
+  edited?: boolean;
 }): PortalPayload {
   const { context, parts, content } = input;
   const contactLine = getClinicContactLine();
@@ -142,7 +152,7 @@ export function assemblePayload(input: {
     consultaDate: context.consulta.timestamp,
     clinic: { doctor: CLINIC.doctor, crm: CLINIC.crm, name: CLINIC.name, contactLine },
     content,
-    medicamentos: mergeMedications(parts.parsedMedications, content.medicamentos),
+    medicamentos: mergeMedications(parts.parsedMedications, content.medicamentos, { edited: input.edited }),
     schedules: {
       dieta: schedule(parts.dieta, content.dieta?.introducao),
       treino: schedule(parts.treino, content.treino?.introducao),
@@ -173,4 +183,24 @@ export function labSummaryForPrompt(labSeries: LabSeries[]): string {
 
 export function expiryFrom(now: Date): string {
   return new Date(now.getTime() + PUBLICATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/** What the model gets to read about this consulta, for generation and for revisions. */
+export function portalPromptInput(context: PublishContext, parts: DerivedParts): PortalPromptInput {
+  return {
+    firstName: context.firstName,
+    sex: context.sex,
+    age: context.age,
+    phase: context.consulta.engineStatus?.phase,
+    analise: parts.analise,
+    condutaSemPlanos: parts.condutaSemPlanos,
+    receita: parts.receita,
+    parsedMedications: parts.parsedMedications,
+    labSummary: labSummaryForPrompt(context.labSeries),
+    nextVisitLabel: context.followUp.interval.label,
+    nextVisitReason: context.followUp.interval.reason,
+    suggestedLabs: context.followUp.suggestedLabs.map((l) => l.marker),
+    hasDieta: Boolean(parts.dieta),
+    hasTreino: Boolean(parts.treino),
+  };
 }

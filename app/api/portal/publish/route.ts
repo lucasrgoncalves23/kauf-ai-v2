@@ -12,6 +12,11 @@ import {
   validateContent,
 } from "@/app/lib/portal/assemble";
 import { createPublication, runPortalRetention } from "@/app/lib/portalDb";
+import { createRateLimiter } from "@/app/lib/portal/rateLimit";
+import { isValidSignatureImage, signPayload, verifySigningPin } from "@/app/lib/portal/signature";
+
+// Blunts guessing of the doctor's signing code from a logged-in clinic session
+const signingLimiter = createRateLimiter(15 * 60 * 1000, 8);
 
 export const runtime = "nodejs";
 
@@ -29,12 +34,22 @@ export async function POST(req: Request) {
       consultaId?: unknown;
       content?: unknown;
       doctorConfirmed?: unknown;
+      signature?: { image?: unknown; pin?: unknown; reviewed?: unknown };
     };
     if (typeof body.patientId !== "string" || typeof body.consultaId !== "string") {
       return NextResponse.json({ error: "patientId e consultaId são obrigatórios." }, { status: 400 });
     }
     if (body.doctorConfirmed !== true) {
       return NextResponse.json({ error: "Confirme que o paciente solicitou o acesso digital." }, { status: 400 });
+    }
+    if (body.signature?.reviewed !== true || !isValidSignatureImage(body.signature.image)) {
+      return NextResponse.json({ error: "Assine o plano antes de publicar." }, { status: 400 });
+    }
+    if (!signingLimiter.check(body.patientId).allowed) {
+      return NextResponse.json({ error: "Muitas tentativas de assinatura. Aguarde alguns minutos." }, { status: 429 });
+    }
+    if (!verifySigningPin(body.signature.pin)) {
+      return NextResponse.json({ error: "Código de assinatura incorreto." }, { status: 403 });
     }
     const parsed = parsePortalContent(body.content);
     if (!parsed.success) {
@@ -47,13 +62,12 @@ export async function POST(req: Request) {
 
     const now = new Date();
     const expiresAt = expiryFrom(now);
-    const payload = assemblePayload({
-      context,
-      parts,
-      content,
-      publishedAt: now.toISOString(),
-      expiresAt,
-    });
+    const payload = signPayload(
+      assemblePayload({ context, parts, content, publishedAt: now.toISOString(), expiresAt, edited: true }),
+      body.signature.image,
+      now.toISOString()
+    );
+    const signature = payload.signature!;
 
     const token = newToken();
     const { id } = await createPublication({
@@ -66,11 +80,12 @@ export async function POST(req: Request) {
       payload,
       doctorConfirmedAt: now.toISOString(),
       expiresAt,
+      signature: { signedBy: signature.signer, signedAt: signature.signedAt, payloadHash: signature.hash },
     });
 
     runPortalRetention().catch((err) => logger.warn("Portal retention failed", { error: String(err) }));
 
-    return NextResponse.json({ id, token, expiresAt }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ id, token, expiresAt, signatureCode: signature.code }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     if (err instanceof PortalPublishError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
