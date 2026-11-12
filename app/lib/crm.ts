@@ -10,7 +10,53 @@
  */
 
 import { logger } from "./logger";
+import { buildCrmPatientPayload } from "./crmPayload";
 import type { Consulta, PatientRecord } from "../types/clinical";
+
+/**
+ * Creates or updates the patient in the CRM ("paciente_upsert"). Without
+ * this, a patient registered directly here never appears in the CRM and its
+ * consultations and documents are rejected there (404). Skipped until the
+ * patient has a name and a complete WhatsApp number (the CRM's identity).
+ * Best-effort: returns false on failure, never throws.
+ */
+export async function notifyCrmPacienteUpsert(patient: PatientRecord): Promise<boolean> {
+  const url = process.env.CRM_WEBHOOK_URL;
+  const secret = process.env.KAUF_BRIDGE_SECRET;
+  if (!url || !secret) return false; // ponte não configurada
+
+  const paciente = buildCrmPatientPayload(patient);
+  if (!paciente) return false;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ type: "paciente_upsert", paciente }),
+    });
+    if (!res.ok) {
+      logger.warn("CRM bridge: paciente_upsert failed", {
+        patientId: patient.id,
+        status: res.status,
+        body: (await res.text()).slice(0, 200),
+      });
+      return false;
+    }
+    const data = await res.json().catch(() => ({}));
+    logger.info("CRM bridge: patient upserted", {
+      patientId: patient.id,
+      crmId: data.crm_id,
+      created: data.created,
+    });
+    return true;
+  } catch (error) {
+    logger.warn("CRM bridge: paciente_upsert error", { error: String(error) });
+    return false;
+  }
+}
 
 export async function notifyCrmConsultaFinalizada(
   patient: PatientRecord,
@@ -29,6 +75,10 @@ export async function notifyCrmConsultaFinalizada(
     });
     return;
   }
+
+  // garante que o paciente existe no CRM (pastas criadas aqui, ou falhas
+  // anteriores de sincronização) — senão o CRM responde 404
+  await notifyCrmPacienteUpsert(patient);
 
   try {
     const res = await fetch(url, {
@@ -80,6 +130,8 @@ export async function notifyCrmDocumentoExportado(
   const url = process.env.CRM_WEBHOOK_URL;
   const secret = process.env.KAUF_BRIDGE_SECRET;
   if (!url || !secret || !content.trim()) return null;
+
+  await notifyCrmPacienteUpsert(patient);
 
   try {
     const res = await fetch(url, {

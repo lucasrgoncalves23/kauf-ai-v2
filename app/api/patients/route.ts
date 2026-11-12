@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getAllPatients, createPatient } from "../../lib/db";
+import { notifyCrmPacienteUpsert } from "../../lib/crm";
+import { crmIdentityChanged } from "../../lib/crmPayload";
 import { logger } from "@/app/lib/logger";
 import { verifyClinicPin } from "@/app/lib/auth";
 import type { PatientRecord } from "../../types/clinical";
@@ -54,6 +56,12 @@ export async function POST(request: Request) {
     };
 
     const created = await createPatient(patientWithTimestamps);
+
+    // pasta criada já com nome + WhatsApp → aparece no CRM (após a resposta)
+    if (crmIdentityChanged(null, created)) {
+      after(() => notifyCrmPacienteUpsert(created));
+    }
+
     return NextResponse.json({ patient: created }, { status: 201 });
   } catch (error) {
     logger.error("Failed to create patient", { error: String(error) });

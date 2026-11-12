@@ -3,6 +3,7 @@
 import type { PatientProfile } from "../types/clinical";
 import { isValidSex } from "../lib/extraction";
 import { isValidCpf } from "../lib/cpf";
+import { crmPhone } from "../lib/crmPayload";
 import { SectionLabel } from "./ui/SectionLabel";
 
 type PatientSnapshotProps = {
@@ -106,6 +107,15 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
             value={profile.phone ?? ""}
             onChange={(e) => onProfileChange({ ...profile, phone: e.target.value })}
           />
+          {!profile.phone?.trim() ? (
+            <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+              Sem WhatsApp o paciente não aparece no CRM
+            </p>
+          ) : !crmPhone(profile.phone) ? (
+            <p className="mt-1 text-[10px] text-amber-600 dark:text-amber-400">
+              Celular incompleto: DDD + 9 dígitos
+            </p>
+          ) : null}
         </div>
       </div>
     </>

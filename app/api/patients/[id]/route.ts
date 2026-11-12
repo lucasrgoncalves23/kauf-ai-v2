@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { getPatient, updatePatient, deletePatient } from "../../../lib/db";
+import { notifyCrmPacienteUpsert } from "../../../lib/crm";
+import { crmIdentityChanged } from "../../../lib/crmPayload";
 import { logger } from "@/app/lib/logger";
 import { verifyClinicPin } from "@/app/lib/auth";
 import type { PatientRecord } from "../../../types/clinical";
@@ -46,10 +48,19 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // Don't allow changing the ID
     delete updates.id;
 
+    // estado anterior só quando a identidade pode ter mudado (autosave
+    // manda o registro inteiro; só nome/WhatsApp/CPF/nascimento vão ao CRM)
+    const touchesIdentity = updates.name !== undefined || updates.profile !== undefined;
+    const before = touchesIdentity ? await getPatient(id) : null;
+
     const updated = await updatePatient(id, updates);
 
     if (!updated) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 });
+    }
+
+    if (touchesIdentity && before && crmIdentityChanged(before, updated)) {
+      after(() => notifyCrmPacienteUpsert(updated));
     }
 
     return NextResponse.json({ patient: updated });

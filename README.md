@@ -242,6 +242,7 @@ NEXT_PUBLIC_API_URL=https://api.example.com
 Integração bidirecional com o CRM da clínica:
 
 - **CRM → Kauf AI**: quando um paciente agenda consulta via WhatsApp ou é cadastrado no painel do CRM, ele aparece aqui automaticamente. Endpoint: `POST /api/webhooks/crm` (evento `paciente_upsert`), autenticado por `Authorization: Bearer <KAUF_BRIDGE_SECRET>`. O match usa `kauf_id` → CPF → telefone (`profile.phone`); responde `{ "kauf_id": "..." }`.
+- **Kauf AI → CRM (pacientes)**: pasta criada ou editada aqui é enviada ao CRM (evento `paciente_upsert`) assim que tiver nome e WhatsApp completo (celular com DDD). Também é reenviada antes de cada consulta e documento, para que o CRM nunca rejeite o evento por não conhecer o paciente. Lógica em [app/lib/crmPayload.ts](app/lib/crmPayload.ts).
 - **Kauf AI → CRM**: ao salvar uma consulta, o desfecho (conduta + notas) é enviado ao CRM ([app/lib/crm.ts](app/lib/crm.ts)), que extrai ações operacionais ("retorno semana que vem") como sugestões de tarefa pendentes de aprovação.
 
 ```env
