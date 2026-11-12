@@ -96,24 +96,24 @@ export function HeaderBar({
             disabled={isSavingConsulta}
             title="Salvar consulta"
             aria-label="Salvar consulta"
-            className={`flex items-center gap-1.5 px-3 @min-[1000px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`flex items-center gap-1.5 px-3 @min-[860px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all ${
               isSavingConsulta
                 ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-400 cursor-wait"
                 : "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800"
             }`}
           >
             {isSavingConsulta ? <Spinner /> : <Save className="w-3.5 h-3.5" />}
-            <span className="hidden @min-[1000px]:inline">Salvar consulta</span>
+            <span className="hidden @min-[860px]:inline">Salvar consulta</span>
           </button>
         )}
         <button
           onClick={onClearSession}
           title="Limpar sessão"
           aria-label="Limpar sessão"
-          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-3 @min-[1000px]:px-4 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-3 @min-[860px]:px-4 py-2.5 rounded-lg text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
         >
-          <Eraser className="w-3.5 h-3.5 @min-[1000px]:hidden" />
-          <span className="hidden @min-[1000px]:inline">Limpar sessão</span>
+          <Eraser className="w-3.5 h-3.5 @min-[860px]:hidden" />
+          <span className="hidden @min-[860px]:inline">Limpar sessão</span>
         </button>
         <div className="relative">
           <button
@@ -121,7 +121,7 @@ export function HeaderBar({
             disabled={isGeneratingPatientPdf}
             title="Exportar PDF"
             aria-label="Exportar PDF"
-            className={`flex items-center gap-2 px-3 @min-[1000px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-lg shadow-slate-200 dark:shadow-slate-900/30 ${
+            className={`flex items-center gap-2 px-3 @min-[860px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-lg shadow-slate-200 dark:shadow-slate-900/30 ${
               isGeneratingPatientPdf
                 ? "bg-slate-300 text-slate-500 cursor-wait"
                 : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-white"
@@ -130,13 +130,13 @@ export function HeaderBar({
             {isGeneratingPatientPdf ? (
               <>
                 <Spinner />
-                <span className="hidden @min-[1000px]:inline">Gerando...</span>
+                <span className="hidden @min-[860px]:inline">Gerando...</span>
               </>
             ) : (
               <>
-                <Download className="w-3.5 h-3.5 @min-[1000px]:hidden" />
-                <span className="hidden @min-[1000px]:inline">Exportar PDF</span>
-                <ChevronDown className="hidden @min-[1000px]:block w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 @min-[860px]:hidden" />
+                <span className="hidden @min-[860px]:inline">Exportar PDF</span>
+                <ChevronDown className="hidden @min-[860px]:block w-3.5 h-3.5" />
               </>
             )}
           </button>

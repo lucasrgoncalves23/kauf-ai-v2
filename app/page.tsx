@@ -29,6 +29,7 @@ import { createBlankPatient } from "./utils/patient";
 import { saveConsulta, fetchConsultas, fetchAllConsultas } from "./lib/api-client";
 import { isFullConsulta } from "./lib/consultaSummary";
 import { useUnloadGuard } from "./hooks/useUnloadGuard";
+import { installTabDiagnostics } from "./lib/tabDiagnostics";
 
 // --- COMPONENT IMPORTS ---
 import { TrendingUp, Columns3 } from "lucide-react";
@@ -342,6 +343,11 @@ export default function Home() {
   );
 
   // --- EFFECTS ---
+  // Records how the tab is lost on the doctor's Safari and blocks page-level window.close()
+  useEffect(() => {
+    installTabDiagnostics();
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
@@ -438,8 +444,8 @@ export default function Home() {
           />
         )}
 
-        <div className="relative mx-auto max-w-[1600px] h-screen flex flex-col p-6 compact:p-3">
-          <div className="grid h-full gap-8 compact:gap-4" style={{ gridTemplateColumns: gridCols }}>
+        <div className="relative mx-auto max-w-[1600px] h-dvh flex flex-col p-3 compact:p-2">
+          <div className="grid h-full gap-4 compact:gap-3" style={{ gridTemplateColumns: gridCols }}>
 
             {/* LEFT: SNAPSHOT */}
             {!leftCollapsed && (
