@@ -71,9 +71,6 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | [extraction.ts](app/lib/extraction.ts) | Regex extraction of demographics/labs from text |
 | [audit.ts](app/lib/audit.ts) | Client-side audit log (localStorage) |
 | [crm.ts](app/lib/crm.ts) | Outbound CRM notifications |
-| [whatsapp.ts](app/lib/whatsapp.ts) | Meta Cloud API client (send template/text/document, webhook verification, payload parsing) |
-| [whatsappTemplates.ts](app/lib/whatsappTemplates.ts) | Approved template registry + parameter builders |
-| [whatsappNotify.ts](app/lib/whatsappNotify.ts) | Best-effort notification triggers (consulta, documento, lembrete, retorno, anamnese) |
 | [clientPdf.ts](app/lib/clientPdf.ts) | Browser-side pdf.js text extraction / page render / image compression |
 | [condense.ts](app/lib/condense.ts) | Invisible pre-generation step: input fields >15k chars are condensed via `/api/condense-exam` (Haiku) with in-memory caching; the doctor's input boxes are never modified |
 
@@ -92,10 +89,6 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | `/api/verify-pin` | PIN login (rate-limited) |
 | `/api/db/init` | Schema init (admin key or PIN) |
 | `/api/webhooks/crm` | Inbound CRM patient upsert (Bearer `KAUF_BRIDGE_SECRET`) |
-| `/api/webhooks/whatsapp` | Meta Cloud API webhook (GET verification + POST inbound messages/status) |
-| `/api/whatsapp/send` | Send template, freeform text, or document to a patient (PIN auth + LGPD check) |
-| `/api/whatsapp/messages` | GET conversation history for a patient |
-| `/api/whatsapp/opt-in` | POST consent / DELETE revoke / GET status (LGPD) |
 
 ### Frontend
 
@@ -104,27 +97,12 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 
 ---
 
-## WhatsApp CRM (Direct Integration)
+## WhatsApp — not in this app
 
-Direct Meta Cloud API integration for patient messaging. Env vars: `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_BUSINESS_ID`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. All optional — when unconfigured, WhatsApp features are silently disabled (same pattern as the CRM bridge).
+**Kauf AI has no WhatsApp.** All patient WhatsApp messaging (Meta Cloud API, webhook, inbox, bot, reminders, templates, LGPD opt-out) lives in the **Kauf CRM** (`~/kaufmann-clinic-os`, Vercel project `kauf-crm`). Meta delivers the clinic number's webhooks straight to the CRM since 2026-08-11.
 
-### Message Flow
-- **Outbound templates** (outside 24h window): consulta_resumo, lembrete_consulta, retorno_fase, formulario_anamnese, documento_disponivel. Defined in [whatsappTemplates.ts](app/lib/whatsappTemplates.ts); must match approved templates in Meta Business Manager.
-- **Freeform text/documents** (within 24h window): doctor can reply directly via the send endpoint. The 24h window opens when a patient sends any inbound message.
-- **Inbound**: patient replies (text, buttons, interactive) are stored in `wa_messages` and linked to patients by phone. Button payloads (CONFIRM_APPOINTMENT, RESCHEDULE_APPOINTMENT, SCHEDULE_RETURN) are logged for future automation.
-
-### Auto-triggers
-- Consulta saved → sends `consulta_resumo` template (wired in [patients/[id]/consultas/route.ts](app/api/patients/[id]/consultas/route.ts) alongside CRM notify)
-- Document exported → sends `documento_disponivel` (via `notifyWhatsAppDocumentoExportado`)
-- All triggers check LGPD opt-in before sending; fail silently if unconsented.
-
-### DB Tables
-- `wa_messages` — every sent/received message with delivery status tracking
-- `wa_conversations` — active 24h session windows per phone
-- `wa_opt_in` — LGPD consent records (patient_id, consented_at, revoked_at, method)
-
-### LGPD Compliance
-Patients must be opted in via `/api/whatsapp/opt-in` before any automated message is sent. Opt-out stops all messaging. The "SAIR" keyword in inbound messages should trigger auto-revocation (TODO: implement in webhook handler).
+- Do **not** add WhatsApp sending, webhooks or inboxes here. If a clinical event here should reach the patient by WhatsApp, send it to the CRM through the bridge (see [crm.ts](app/lib/crm.ts) — e.g. `consulta_finalizada`, `documento_exportado`) and let the CRM message the patient.
+- An integration was built here by mistake in Aug 2026 and removed on 2026-11-14 ("Phase E"). The Neon tables `wa_messages`, `wa_conversations` and `wa_opt_in` remain only as a frozen LGPD archive — nothing reads or writes them.
 
 ---
 
