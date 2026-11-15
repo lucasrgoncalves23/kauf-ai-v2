@@ -70,7 +70,11 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | [api-client.ts](app/lib/api-client.ts) | Client-side API wrapper with localStorage fallback |
 | [extraction.ts](app/lib/extraction.ts) | Regex extraction of demographics/labs from text |
 | [audit.ts](app/lib/audit.ts) | Client-side audit log (localStorage) |
-| [crm.ts](app/lib/crm.ts) | Outbound CRM notifications |
+| [crm.ts](app/lib/crm.ts) | Outbound CRM notifications (`paciente_upsert`, `consulta_finalizada` with `consulta_em` + structured `retorno`, `portal_publicado`, `portal_revogado`) |
+| [portal/link.ts](app/lib/portal/link.ts) | Server-side public portal link (`PORTAL_PUBLIC_URL` + `/portal#<token>`) sent to the CRM |
+| [crmPayload.ts](app/lib/crmPayload.ts) | Pure CRM payload builders (patient identity, `buildRetornoPayload` from followUp.ts) |
+| [examText.ts](app/lib/examText.ts) | Server-side exam text extraction (pdf-parse → Vision; images → Vision), shared by `/api/import-pdf` and the CRM webhook |
+| [examFormat.ts](app/lib/examFormat.ts) | Pure helpers to append a received exam to the Laboratoriais layer (client-safe) |
 | [clientPdf.ts](app/lib/clientPdf.ts) | Browser-side pdf.js text extraction / page render / image compression |
 | [condense.ts](app/lib/condense.ts) | Invisible pre-generation step: input fields >15k chars are condensed via `/api/condense-exam` (Haiku) with in-memory caching; the doctor's input boxes are never modified |
 
@@ -88,7 +92,9 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | `/api/patients`, `/api/patients/[id]`, `/api/patients/[id]/consultas`, `/api/consultas` | Patient/consulta CRUD (Neon) |
 | `/api/verify-pin` | PIN login (rate-limited) |
 | `/api/db/init` | Schema init (admin key or PIN) |
-| `/api/webhooks/crm` | Inbound CRM patient upsert (Bearer `KAUF_BRIDGE_SECRET`) |
+| `/api/webhooks/crm` | Inbound CRM events (Bearer `KAUF_BRIDGE_SECRET`): `paciente_upsert`, `agenda_hoje`, `alerta_clinico`, `briefing_pre_consulta`, `exame_recebido` |
+| `/api/crm/agenda`, `/api/crm/alerts` | Today's agenda and alerts pushed by the CRM (sidebar `CrmPanel`) |
+| `/api/crm/briefings`, `/api/crm/exams` | Pre-consulta briefings and WhatsApp exams pushed by the CRM (sidebar `CrmInboxCard`; PATCH marks used/imported) |
 
 ### Frontend
 
@@ -101,8 +107,18 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 
 **Kauf AI has no WhatsApp.** All patient WhatsApp messaging (Meta Cloud API, webhook, inbox, bot, reminders, templates, LGPD opt-out) lives in the **Kauf CRM** (`~/kaufmann-clinic-os`, Vercel project `kauf-crm`). Meta delivers the clinic number's webhooks straight to the CRM since 2026-08-11.
 
-- Do **not** add WhatsApp sending, webhooks or inboxes here. If a clinical event here should reach the patient by WhatsApp, send it to the CRM through the bridge (see [crm.ts](app/lib/crm.ts) — e.g. `consulta_finalizada`, `documento_exportado`) and let the CRM message the patient.
+- Do **not** add WhatsApp sending, webhooks or inboxes here. If a clinical event here should reach the patient by WhatsApp, send it to the CRM through the bridge (see [crm.ts](app/lib/crm.ts) — e.g. `consulta_finalizada`, `portal_publicado`) and let the CRM message the patient.
 - An integration was built here by mistake in Aug 2026 and removed on 2026-11-14 ("Phase E"). The Neon tables `wa_messages`, `wa_conversations` and `wa_opt_in` remain only as a frozen LGPD archive — nothing reads or writes them.
+
+## CRM bridge (what flows in each direction)
+
+Shared secret `KAUF_BRIDGE_SECRET`; outbound URL `CRM_WEBHOOK_URL`. Patients match by `kauf_id` → CPF → phone.
+
+- **Out, on consulta save** (`notifyCrmConsultaFinalizada`): conduta + notes as `resumo`, `fase`, `receita`, `consulta_em` (so the CRM closes the matching appointment) and `retorno` — the rule-based next-visit interval, date (São Paulo calendar day) and suggested labs from [followUp.ts](app/lib/followUp.ts). The CRM uses `retorno` to invite the patient to book the return and to remind the labs; it no longer guesses those from free text.
+- **Out, on portal publish, reissue and revoke**: `portal_publicado` carries the full public link (`PORTAL_PUBLIC_URL` + `/portal#<token>`), its publication id, expiry and consulta date; `portal_revogado` carries the publication id. The CRM sends the link on WhatsApp with the `documento_pronto` template and stops offering a revoked one. The document viewer on the CRM side was retired. Exports from this app are no longer sent to the CRM. Without `PORTAL_PUBLIC_URL` the publish still works but the CRM is not told, and a warning is logged.
+- **In, `briefing_pre_consulta`**: the CRM's summary of what the patient said on WhatsApp since the last consulta (plus check-ins and intake form). Stored in `crm_briefings` and shown in [CrmInboxCard.tsx](app/components/CrmInboxCard.tsx) in the left sidebar; "Adicionar à anamnese" appends it to the anamnese input (the doctor decides — nothing is injected into prompts automatically; the generation prompts are untouched).
+- **In, `exame_recebido`**: an exam the patient sent on WhatsApp (base64 ≤4MB; PDF/JPEG/PNG/WebP/GIF). Text is extracted via [examText.ts](app/lib/examText.ts) into `crm_exams`. If the patient's Laboratoriais layer is empty it is imported immediately (`imported_at`); otherwise it waits for "Importar para laboratoriais" in the card. The binary is not stored.
+- Tables `crm_agenda`, `crm_alerts`, `crm_briefings`, `crm_exams` are created lazily by `ensureCrmTables()` in [db.ts](app/lib/db.ts).
 
 ---
 

@@ -11,6 +11,8 @@ import {
   PortalPublishError,
   validateContent,
 } from "@/app/lib/portal/assemble";
+import { notifyCrmPortalPublicado } from "@/app/lib/crm";
+import { portalPublicUrl } from "@/app/lib/portal/link";
 import { createPublication, runPortalRetention } from "@/app/lib/portalDb";
 import { createRateLimiter } from "@/app/lib/portal/rateLimit";
 import { isValidSignatureImage, signPayload, verifySigningPin } from "@/app/lib/portal/signature";
@@ -84,6 +86,19 @@ export async function POST(req: Request) {
     });
 
     runPortalRetention().catch((err) => logger.warn("Portal retention failed", { error: String(err) }));
+
+    // a clínica manda o link pelo WhatsApp (CRM) — melhor esforço, nunca bloqueia a publicação
+    const publicUrl = portalPublicUrl(token);
+    if (publicUrl) {
+      await notifyCrmPortalPublicado(context.patient, {
+        id,
+        url: publicUrl,
+        expiresAt,
+        consultaAt: context.consulta.timestamp,
+      });
+    } else {
+      logger.warn("PORTAL_PUBLIC_URL not set: CRM not notified of the portal link", { publicationId: id });
+    }
 
     return NextResponse.json({ id, token, expiresAt, signatureCode: signature.code }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {

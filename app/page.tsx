@@ -42,6 +42,8 @@ import { MedicalReportPrint } from "./components/MedicalReportPrint";
 import { LabTrendsModal } from "./components/LabTrendsModal";
 import { ConsultaCompareModal } from "./components/ConsultaCompareModal";
 import { CrmPanel } from "./components/CrmPanel";
+import { CrmInboxCard } from "./components/CrmInboxCard";
+import { appendToLayer } from "./lib/examFormat";
 import {
   PinLogin,
   PatientSwitcher,
@@ -508,6 +510,14 @@ export default function Home() {
                   consultas={currentConsultas}
                   currentInputs={inputs}
                   engineStatus={engineStatus}
+                />
+                <CrmInboxCard
+                  key={currentPatientId ?? "none"}
+                  patientId={currentPatientId}
+                  onAppend={(field, text) =>
+                    setInputs({ ...inputs, [field]: appendToLayer(inputs[field], text) })
+                  }
+                  setToast={setToast}
                 />
                 <PatientPortalCard
                   patientId={currentPatientId}

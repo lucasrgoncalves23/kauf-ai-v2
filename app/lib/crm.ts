@@ -10,7 +10,9 @@
  */
 
 import { logger } from "./logger";
-import { buildCrmPatientPayload } from "./crmPayload";
+import { buildCrmPatientPayload, buildRetornoPayload, type CrmRetornoPayload } from "./crmPayload";
+import { getConsultas } from "./db";
+import { computeFollowUp } from "./followUp";
 import type { Consulta, PatientRecord } from "../types/clinical";
 
 /**
@@ -80,6 +82,17 @@ export async function notifyCrmConsultaFinalizada(
   // anteriores de sincronização) — senão o CRM responde 404
   await notifyCrmPacienteUpsert(patient);
 
+  // plano de retorno estruturado (mesma regra do card "Próximo Retorno"):
+  // o CRM convida o paciente na data certa e lembra os exames sugeridos
+  let retorno: CrmRetornoPayload | undefined;
+  try {
+    const consultas = await getConsultas(patient.id);
+    const all = consultas.some((c) => c.id === consulta.id) ? consultas : [...consultas, consulta];
+    retorno = buildRetornoPayload(computeFollowUp(all, consulta.inputs, consulta.engineStatus));
+  } catch (error) {
+    logger.warn("CRM bridge: could not compute retorno", { error: String(error) });
+  }
+
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -98,6 +111,9 @@ export async function notifyCrmConsultaFinalizada(
         fase: consulta.engineStatus?.phase ?? undefined,
         // receita → CRM extrai as medicações (lembretes de renovação, busca)
         receita: consulta.outputs?.receita?.trim() || undefined,
+        // quando a consulta aconteceu → o CRM conclui a consulta correspondente
+        consulta_em: consulta.timestamp,
+        retorno,
       }),
     });
     if (!res.ok) {
@@ -117,19 +133,24 @@ export async function notifyCrmConsultaFinalizada(
   }
 }
 
+export interface PortalPublicationRef {
+  id: string;
+  url: string;
+  expiresAt: string;
+  consultaAt: string | null;
+}
+
 /**
- * Notifies the CRM that a document was exported (patient-friendly plan or
- * prescription) so it can be delivered digitally via WhatsApp. Best-effort.
- * Returns the public URL created by the CRM, when available.
+ * Tells the CRM a portal report was published (or reissued) so it can send the
+ * link on WhatsApp. Best-effort: never throws, returns false on failure.
  */
-export async function notifyCrmDocumentoExportado(
+export async function notifyCrmPortalPublicado(
   patient: PatientRecord,
-  docType: "patient_pdf" | "prescription" | "clinical",
-  content: string
-): Promise<string | null> {
+  pub: PortalPublicationRef
+): Promise<boolean> {
   const url = process.env.CRM_WEBHOOK_URL;
   const secret = process.env.KAUF_BRIDGE_SECRET;
-  if (!url || !secret || !content.trim()) return null;
+  if (!url || !secret) return false;
 
   await notifyCrmPacienteUpsert(patient);
 
@@ -141,31 +162,56 @@ export async function notifyCrmDocumentoExportado(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        type: "documento_exportado",
+        type: "portal_publicado",
         paciente: {
           kauf_id: patient.id,
           cpf: patient.profile?.cpf || undefined,
           telefone: patient.profile?.phone || undefined,
         },
-        doc_type: docType,
-        content,
+        publicacao: {
+          id: pub.id,
+          url: pub.url,
+          expires_at: pub.expiresAt,
+          consulta_em: pub.consultaAt,
+        },
       }),
+      signal: AbortSignal.timeout(8000), // a publicação não espera o CRM além disso
     });
     if (!res.ok) {
-      logger.warn("CRM bridge: documento_exportado failed", {
-        status: res.status,
-      });
-      return null;
+      logger.warn("CRM bridge: portal_publicado failed", { status: res.status });
+      return false;
     }
-    const data = await res.json().catch(() => ({}));
-    logger.info("CRM bridge: documento exported", {
-      patientId: patient.id,
-      docType,
-      url: data.url,
-    });
-    return data.url ?? null;
+    logger.info("CRM bridge: portal link sent to CRM", { patientId: patient.id, publicationId: pub.id });
+    return true;
   } catch (error) {
-    logger.warn("CRM bridge: documento_exportado error", { error: String(error) });
-    return null;
+    logger.warn("CRM bridge: portal_publicado error", { error: String(error) });
+    return false;
+  }
+}
+
+/** Tells the CRM a publication was revoked, so it stops offering the link. */
+export async function notifyCrmPortalRevogado(publicationId: string): Promise<boolean> {
+  const url = process.env.CRM_WEBHOOK_URL;
+  const secret = process.env.KAUF_BRIDGE_SECRET;
+  if (!url || !secret) return false;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ type: "portal_revogado", publicacao: { id: publicationId } }),
+      signal: AbortSignal.timeout(8000), // a publicação não espera o CRM além disso
+    });
+    if (!res.ok) {
+      logger.warn("CRM bridge: portal_revogado failed", { status: res.status });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.warn("CRM bridge: portal_revogado error", { error: String(error) });
+    return false;
   }
 }
