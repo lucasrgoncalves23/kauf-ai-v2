@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyClinicPin } from "@/app/lib/auth";
 import { logger } from "@/app/lib/logger";
+import { notifyCrmPortalRevogado } from "@/app/lib/crm";
 import { revokePublication } from "@/app/lib/portalDb";
 
 export const runtime = "nodejs";
@@ -13,6 +14,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const ok = await revokePublication(id);
     if (!ok) return NextResponse.json({ error: "Publicação não encontrada ou já revogada." }, { status: 404 });
+    await notifyCrmPortalRevogado(id);
     return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     logger.error("Portal revoke failed", { error: String(err) });

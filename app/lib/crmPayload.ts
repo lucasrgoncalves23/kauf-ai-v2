@@ -8,6 +8,7 @@
  */
 
 import { isValidCpf, normalizeCpf } from "./cpf";
+import type { FollowUpRecommendation } from "./followUp";
 import type { PatientRecord } from "../types/clinical";
 
 /** "+55 11 99999-8888" → "+5511999998888"; null if not a complete mobile. */
@@ -68,4 +69,34 @@ export function crmIdentityChanged(
   if (!next) return false;
   if (!before) return true;
   return JSON.stringify(buildCrmPatientPayload(before)) !== JSON.stringify(next);
+}
+
+export type CrmRetornoPayload = {
+  dias: number;
+  data?: string; // YYYY-MM-DD, clinic timezone (São Paulo)
+  motivo: string;
+  exames: { marcador: string; motivo: string; prioridade: "high" | "medium" | "low" }[];
+};
+
+/** YYYY-MM-DD of an ISO instant in São Paulo (UTC−3, no DST since 2019). */
+export function spDate(iso: string): string {
+  return new Date(new Date(iso).getTime() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * Structured return plan for the CRM "consulta_finalizada" event, from the
+ * rule-based follow-up (followUp.ts). The CRM invites the patient to book the
+ * return and reminds the suggested labs on its own — no free-text guessing.
+ */
+export function buildRetornoPayload(rec: FollowUpRecommendation): CrmRetornoPayload {
+  return {
+    dias: rec.interval.days,
+    ...(rec.nextDate ? { data: spDate(rec.nextDate) } : {}),
+    motivo: rec.interval.reason,
+    exames: rec.suggestedLabs.slice(0, 10).map((l) => ({
+      marcador: l.marker,
+      motivo: l.reason,
+      prioridade: l.priority,
+    })),
+  };
 }

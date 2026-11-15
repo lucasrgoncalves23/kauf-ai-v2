@@ -136,6 +136,38 @@ function ensureCrmTables(): Promise<void> {
           dismissed_at TIMESTAMPTZ
         )
       `;
+      // relato pré-consulta: o que o paciente disse no WhatsApp (resumido pelo CRM)
+      await sql`
+        CREATE TABLE IF NOT EXISTS crm_briefings (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          consulta_em TIMESTAMPTZ,
+          periodo_de TIMESTAMPTZ,
+          periodo_ate TIMESTAMPTZ,
+          texto TEXT NOT NULL,
+          fontes JSONB NOT NULL DEFAULT '{}',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          used_at TIMESTAMPTZ
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_crm_briefings_patient ON crm_briefings(patient_id, created_at DESC)`;
+      // exames que o paciente mandou no WhatsApp (texto extraído; o arquivo não fica aqui)
+      await sql`
+        CREATE TABLE IF NOT EXISTS crm_exams (
+          id TEXT PRIMARY KEY,
+          patient_id TEXT NOT NULL,
+          filename TEXT,
+          mime TEXT,
+          size_bytes INTEGER,
+          caption TEXT,
+          texto TEXT NOT NULL,
+          method TEXT,
+          recebido_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          imported_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS idx_crm_exams_patient ON crm_exams(patient_id, created_at DESC)`;
     })().catch((err) => {
       crmTablesReady = null; // allow retry on next call
       throw err;
@@ -240,6 +272,163 @@ export async function getActiveCrmAlerts(): Promise<CrmAlert[]> {
         ? row.dismissedAt.toISOString()
         : row.dismissedAt,
   }));
+}
+
+export interface CrmBriefing {
+  id: string;
+  patientId: string;
+  consultaEm: string | null;
+  periodoDe: string | null;
+  periodoAte: string | null;
+  texto: string;
+  fontes: { mensagens?: number; checkins?: number; intake?: boolean };
+  createdAt: string;
+  usedAt: string | null;
+}
+
+export interface CrmExam {
+  id: string;
+  patientId: string;
+  filename: string | null;
+  mime: string | null;
+  sizeBytes: number | null;
+  caption: string | null;
+  texto: string;
+  method: string | null;
+  recebidoEm: string;
+  importedAt: string | null;
+  createdAt: string;
+}
+
+function iso(v: unknown): string | null {
+  if (v instanceof Date) return v.toISOString();
+  return (v as string | null) ?? null;
+}
+
+export async function insertCrmBriefing(b: {
+  id: string;
+  patientId: string;
+  consultaEm: string | null;
+  periodoDe: string | null;
+  periodoAte: string | null;
+  texto: string;
+  fontes: CrmBriefing["fontes"];
+}): Promise<void> {
+  await ensureCrmTables();
+  const sql = getDb();
+  await sql`
+    INSERT INTO crm_briefings (id, patient_id, consulta_em, periodo_de, periodo_ate, texto, fontes)
+    VALUES (${b.id}, ${b.patientId}, ${b.consultaEm}, ${b.periodoDe}, ${b.periodoAte}, ${b.texto}, ${jsonb(b.fontes)})
+    ON CONFLICT (id) DO NOTHING
+  `;
+}
+
+/** Latest briefings for a patient (newest first). */
+export async function getCrmBriefings(patientId: string, limit = 3): Promise<CrmBriefing[]> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const rows = await sql`
+    SELECT id, patient_id as "patientId", consulta_em as "consultaEm",
+           periodo_de as "periodoDe", periodo_ate as "periodoAte",
+           texto, fontes, created_at as "createdAt", used_at as "usedAt"
+    FROM crm_briefings WHERE patient_id = ${patientId}
+    ORDER BY created_at DESC LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    patientId: r.patientId,
+    consultaEm: iso(r.consultaEm),
+    periodoDe: iso(r.periodoDe),
+    periodoAte: iso(r.periodoAte),
+    texto: r.texto,
+    fontes: (r.fontes ?? {}) as CrmBriefing["fontes"],
+    createdAt: iso(r.createdAt) ?? "",
+    usedAt: iso(r.usedAt),
+  }));
+}
+
+export async function markCrmBriefingUsed(id: string): Promise<boolean> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const result = await sql`UPDATE crm_briefings SET used_at = NOW() WHERE id = ${id} RETURNING id`;
+  return result.length > 0;
+}
+
+export async function insertCrmExam(e: {
+  id: string;
+  patientId: string;
+  filename: string | null;
+  mime: string | null;
+  sizeBytes: number | null;
+  caption: string | null;
+  texto: string;
+  method: string | null;
+  recebidoEm: string;
+  importedAt: string | null;
+}): Promise<void> {
+  await ensureCrmTables();
+  const sql = getDb();
+  await sql`
+    INSERT INTO crm_exams (id, patient_id, filename, mime, size_bytes, caption, texto, method, recebido_em, imported_at)
+    VALUES (${e.id}, ${e.patientId}, ${e.filename}, ${e.mime}, ${e.sizeBytes}, ${e.caption}, ${e.texto}, ${e.method}, ${e.recebidoEm}, ${e.importedAt})
+    ON CONFLICT (id) DO NOTHING
+  `;
+}
+
+export async function getCrmExams(patientId: string, limit = 10): Promise<CrmExam[]> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const rows = await sql`
+    SELECT id, patient_id as "patientId", filename, mime, size_bytes as "sizeBytes", caption,
+           texto, method, recebido_em as "recebidoEm", imported_at as "importedAt", created_at as "createdAt"
+    FROM crm_exams WHERE patient_id = ${patientId}
+    ORDER BY created_at DESC LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    patientId: r.patientId,
+    filename: r.filename,
+    mime: r.mime,
+    sizeBytes: r.sizeBytes,
+    caption: r.caption,
+    texto: r.texto,
+    method: r.method,
+    recebidoEm: iso(r.recebidoEm) ?? "",
+    importedAt: iso(r.importedAt),
+    createdAt: iso(r.createdAt) ?? "",
+  }));
+}
+
+export async function getCrmExam(id: string): Promise<CrmExam | null> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const rows = await sql`
+    SELECT id, patient_id as "patientId", filename, mime, size_bytes as "sizeBytes", caption,
+           texto, method, recebido_em as "recebidoEm", imported_at as "importedAt", created_at as "createdAt"
+    FROM crm_exams WHERE id = ${id}
+  `;
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return {
+    id: r.id,
+    patientId: r.patientId,
+    filename: r.filename,
+    mime: r.mime,
+    sizeBytes: r.sizeBytes,
+    caption: r.caption,
+    texto: r.texto,
+    method: r.method,
+    recebidoEm: iso(r.recebidoEm) ?? "",
+    importedAt: iso(r.importedAt),
+    createdAt: iso(r.createdAt) ?? "",
+  };
+}
+
+export async function markCrmExamImported(id: string): Promise<boolean> {
+  await ensureCrmTables();
+  const sql = getDb();
+  const result = await sql`UPDATE crm_exams SET imported_at = NOW() WHERE id = ${id} RETURNING id`;
+  return result.length > 0;
 }
 
 export async function dismissCrmAlert(id: string): Promise<boolean> {

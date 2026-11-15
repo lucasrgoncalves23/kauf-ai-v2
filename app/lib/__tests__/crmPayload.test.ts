@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCrmPatientPayload,
+  buildRetornoPayload,
   crmBirthDate,
   crmIdentityChanged,
   crmPhone,
+  spDate,
 } from "../crmPayload";
 import type { PatientRecord } from "../../types/clinical";
 
@@ -89,5 +91,42 @@ describe("crmIdentityChanged", () => {
   });
   it("fires for new patients that are already syncable", () => {
     expect(crmIdentityChanged(null, base)).toBe(true);
+  });
+});
+
+describe("buildRetornoPayload", () => {
+  it("maps the follow-up recommendation to the CRM contract with a São Paulo date", () => {
+    const payload = buildRetornoPayload({
+      interval: { days: 21, label: "2-3 semanas", reason: "Fase A — instabilidade autonômica requer acompanhamento próximo" },
+      suggestedLabs: [
+        { marker: "TSH", reason: "Fora da faixa de referência", priority: "medium" },
+        { marker: "Vitamina D", reason: "Sem registro — solicitar", priority: "low" },
+      ],
+      lastConsultaDate: "2026-11-05T01:30:00.000Z", // 22:30 de 04/11 em São Paulo
+      nextDate: "2026-11-26T01:30:00.000Z",
+    });
+    expect(payload).toEqual({
+      dias: 21,
+      data: "2026-11-25",
+      motivo: "Fase A — instabilidade autonômica requer acompanhamento próximo",
+      exames: [
+        { marcador: "TSH", motivo: "Fora da faixa de referência", prioridade: "medium" },
+        { marcador: "Vitamina D", motivo: "Sem registro — solicitar", prioridade: "low" },
+      ],
+    });
+  });
+  it("omits the date when there is no consulta yet and caps labs at 10", () => {
+    const payload = buildRetornoPayload({
+      interval: { days: 42, label: "4-6 semanas", reason: "Sem dados de fase — intervalo padrão" },
+      suggestedLabs: Array.from({ length: 12 }, (_, i) => ({ marker: `M${i}`, reason: "", priority: "low" as const })),
+      lastConsultaDate: null,
+      nextDate: null,
+    });
+    expect(payload.data).toBeUndefined();
+    expect(payload.exames).toHaveLength(10);
+  });
+  it("spDate converts an instant to the clinic's calendar day", () => {
+    expect(spDate("2026-11-05T01:30:00.000Z")).toBe("2026-11-04");
+    expect(spDate("2026-11-05T12:00:00.000Z")).toBe("2026-11-05");
   });
 });
