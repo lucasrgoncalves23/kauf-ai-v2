@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getConsultas, createConsulta, getPatient } from "../../../../lib/db";
-import { notifyCrmConsultaFinalizada } from "../../../../lib/crm";
+import { notifyCrmConsultaFinalizada, notifyCrmPacienteUpsert } from "../../../../lib/crm";
 import { logger } from "@/app/lib/logger";
 import { verifyClinicPin } from "@/app/lib/auth";
 import type { Consulta } from "../../../../types/clinical";
@@ -65,6 +65,8 @@ export async function POST(
 
     // avisa o CRM (melhor esforço — nunca bloqueia o salvamento).
     // O WhatsApp do paciente é enviado pelo CRM ao receber este evento.
+    // identidade sempre: salvar de novo envia nome, CPF e telefone atuais (ex.: número trocado)
+    await notifyCrmPacienteUpsert(patient);
     await notifyCrmConsultaFinalizada(patient, created);
 
     return NextResponse.json({ consulta: created }, { status: 201 });
