@@ -5,17 +5,20 @@ import { Square } from "lucide-react";
 type GenerationButtonsProps = {
   // Análise
   isRunningAnalise: boolean;
-  canRunAnalise: boolean;
+  /** Why it can't run yet ("Falta anamnese"), or null when it can */
+  analiseBlocked: string | null;
   onRunAnalise: () => void;
   onStopAnalise: () => void;
   // Conduta
   isRunningConduta: boolean;
-  canRunConduta: boolean;
+  /** Why it can't run yet ("Falta anamnese"), or null when it can */
+  condutaBlocked: string | null;
   onRunConduta: () => void;
   onStopConduta: () => void;
   // Receita
   isRunningReceita: boolean;
-  canRunReceita: boolean;
+  /** Why it can't run yet ("Falta anamnese"), or null when it can */
+  receitaBlocked: string | null;
   onRunReceita: () => void;
   onStopReceita: () => void;
 };
@@ -29,52 +32,63 @@ const disabledClass = `${baseClass} bg-slate-100 dark:bg-slate-800 text-slate-40
 type RunButtonProps = {
   label: string;
   isRunning: boolean;
-  canRun: boolean;
+  blockedReason: string | null;
   onRun: () => void;
   onStop: () => void;
   activeClass: string;
 };
 
-function RunButton({ label, isRunning, canRun, onRun, onStop, activeClass }: RunButtonProps) {
+function RunButton({ label, isRunning, blockedReason, onRun, onStop, activeClass }: RunButtonProps) {
   if (isRunning) {
     return (
-      <button onClick={onStop} className={stopClass}>
-        <Square className="w-3.5 h-3.5 fill-current" />
-        <span>Parar</span>
-      </button>
+      <div className="flex flex-col items-center">
+        <button onClick={onStop} className={stopClass}>
+          <Square className="w-3.5 h-3.5 fill-current" />
+          <span>Parar</span>
+        </button>
+      </div>
     );
   }
+  const blocked = !!blockedReason;
   return (
-    <button
-      onClick={onRun}
-      disabled={!canRun}
-      className={!canRun ? disabledClass : `${baseClass} ${activeClass} text-white hover:-translate-y-0.5 hover:shadow-xl`}
-    >
-      <span>{label}</span>
-    </button>
+    <div className="flex flex-col items-center gap-1.5 compact:gap-1">
+      <button
+        onClick={onRun}
+        disabled={blocked}
+        title={blockedReason ?? undefined}
+        className={blocked ? disabledClass : `${baseClass} ${activeClass} text-white hover:-translate-y-0.5 hover:shadow-xl`}
+      >
+        <span>{label}</span>
+      </button>
+      {blocked && (
+        <span className="max-w-[16rem] text-center text-2xs font-medium text-amber-600 dark:text-amber-400">
+          {blockedReason}
+        </span>
+      )}
+    </div>
   );
 }
 
 export function GenerationButtons({
   isRunningAnalise,
-  canRunAnalise,
+  analiseBlocked,
   onRunAnalise,
   onStopAnalise,
   isRunningConduta,
-  canRunConduta,
+  condutaBlocked,
   onRunConduta,
   onStopConduta,
   isRunningReceita,
-  canRunReceita,
+  receitaBlocked,
   onRunReceita,
   onStopReceita,
 }: GenerationButtonsProps) {
   return (
-    <div className="no-print flex justify-center gap-4 py-4 compact:py-2">
+    <div className="no-print flex justify-center items-start gap-4 py-4 compact:py-2">
       <RunButton
         label="Gerar Análise"
         isRunning={isRunningAnalise}
-        canRun={canRunAnalise}
+        blockedReason={analiseBlocked}
         onRun={onRunAnalise}
         onStop={onStopAnalise}
         activeClass="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/25"
@@ -82,7 +96,7 @@ export function GenerationButtons({
       <RunButton
         label="Gerar Conduta"
         isRunning={isRunningConduta}
-        canRun={canRunConduta}
+        blockedReason={condutaBlocked}
         onRun={onRunConduta}
         onStop={onStopConduta}
         activeClass="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/25"
@@ -90,7 +104,7 @@ export function GenerationButtons({
       <RunButton
         label="Gerar Receita"
         isRunning={isRunningReceita}
-        canRun={canRunReceita}
+        blockedReason={receitaBlocked}
         onRun={onRunReceita}
         onStop={onStopReceita}
         activeClass="bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-600/25"

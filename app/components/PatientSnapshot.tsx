@@ -4,6 +4,7 @@ import type { PatientProfile } from "../types/clinical";
 import { isValidSex } from "../lib/extraction";
 import { isValidCpf } from "../lib/cpf";
 import { crmPhone } from "../lib/crmPayload";
+import { ageFromBirthDate, maskBirthDate } from "../lib/birthDate";
 import { SectionLabel } from "./ui/SectionLabel";
 
 type PatientSnapshotProps = {
@@ -16,22 +17,6 @@ const inputClass =
 
 const labelClass =
   "block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1 font-semibold";
-
-function ageFromBirthDate(raw: string, today: Date = new Date()): string | null {
-  const m = raw.trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/);
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  let year = Number(m[3]);
-  if (m[3].length === 2) year += year > today.getFullYear() % 100 ? 1900 : 2000;
-  const birth = new Date(year, month - 1, day);
-  if (birth.getFullYear() !== year || birth.getMonth() !== month - 1 || birth.getDate() !== day) return null;
-  if (birth > today) return null;
-  let age = today.getFullYear() - year;
-  const monthDiff = today.getMonth() - (month - 1);
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < day)) age--;
-  return String(age);
-}
 
 export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotProps) {
   const derivedAge = ageFromBirthDate(profile.birthDate);
@@ -55,9 +40,11 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
             <input
               className={inputClass}
               placeholder="DD/MM/AAAA"
+              inputMode="numeric"
+              maxLength={10}
               value={profile.birthDate}
               onChange={(e) => {
-                const birthDate = e.target.value;
+                const birthDate = maskBirthDate(e.target.value, profile.birthDate);
                 onProfileChange({ ...profile, birthDate, age: ageFromBirthDate(birthDate) ?? "" });
               }}
             />

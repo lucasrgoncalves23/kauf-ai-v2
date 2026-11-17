@@ -292,8 +292,20 @@ function parseNotes(text: string): string {
 
 // --- Component ---
 
+/**
+ * C0 fields that mirror the Paciente column. A non-empty value here is
+ * written into the field whenever it changes on the left (and after a session
+ * restore). Sexo and Idade are then read-only, since the left column is their
+ * source (the sex selection gates generation; age comes from the birth date).
+ * Nome stays editable: the page copies an anamnese "Nome:" back to the left.
+ */
+export type LinkedFields = Partial<Record<"nome" | "sexo" | "idade", string>>;
+
+const LOCKED_WHEN_LINKED = new Set(["sexo", "idade"]);
+
 export type AnamneseFormProps = {
   value: string;
+  linked?: LinkedFields;
   onChange: (v: string) => void;
   onImport?: (files: File[]) => void;
   isLoading?: boolean;
@@ -302,6 +314,7 @@ export type AnamneseFormProps = {
 export function AnamneseForm({
   value,
   onChange,
+  linked,
   onImport,
   isLoading,
 }: AnamneseFormProps) {
@@ -314,6 +327,9 @@ export function AnamneseForm({
   const [notes, setNotes] = useState(() => parseNotes(value));
   const [expanded, setExpanded] = useState<Record<number, boolean>>({ 0: true });
   const lastSerialized = useRef(value);
+  // Linked values already written into the fields; a value is written again
+  // only when it changes, so typing in Nome isn't overwritten mid-keystroke.
+  const appliedLinked = useRef<LinkedFields>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync from external value changes (session restore, PDF import)
@@ -323,6 +339,7 @@ export function AnamneseForm({
       setChecks(parseChecks(value));
       setNotes(parseNotes(value));
       lastSerialized.current = value;
+      appliedLinked.current = {};
     }
   }, [value]);
 
@@ -334,6 +351,26 @@ export function AnamneseForm({
     },
     [onChange]
   );
+
+  const linkedNome = linked?.nome?.trim() ?? "";
+  const linkedSexo = linked?.sexo?.trim() ?? "";
+  const linkedIdade = linked?.idade?.trim() ?? "";
+  useEffect(() => {
+    const wanted: LinkedFields = { nome: linkedNome, sexo: linkedSexo, idade: linkedIdade };
+    const patch: Record<string, string> = {};
+    for (const [key, val] of Object.entries(wanted) as [keyof LinkedFields, string][]) {
+      if (!val || appliedLinked.current[key] === val) continue;
+      appliedLinked.current[key] = val;
+      if ((fields[key]?.trim() ?? "") !== val) patch[key] = val;
+    }
+    if (Object.keys(patch).length === 0) return;
+    const next = { ...fields, ...patch };
+    setFields(next);
+    emitChange(next, checks, notes);
+  }, [linkedNome, linkedSexo, linkedIdade, fields, checks, notes, emitChange]);
+
+  const isLocked = (key: string) =>
+    LOCKED_WHEN_LINKED.has(key) && !!linked?.[key as keyof LinkedFields]?.trim();
 
   const handleFieldChange = (key: string, val: string) => {
     const next = { ...fields, [key]: val };
@@ -496,22 +533,32 @@ export function AnamneseForm({
                 <div className="px-3 pb-3 pt-1 compact:px-2 compact:pb-2">
                   {section.type === "fields" ? (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 compact:gap-x-3 compact:gap-y-1.5">
-                      {section.fields.map((field) => (
-                        <div key={field.key}>
-                          <label className="block uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold text-[10px] mb-1 compact:mb-0.5">
-                            {field.label}
-                          </label>
-                          <input
-                            type="text"
-                            className={inputClass}
-                            value={fields[field.key] || ""}
-                            onChange={(e) =>
-                              handleFieldChange(field.key, e.target.value)
-                            }
-                            placeholder="—"
-                          />
-                        </div>
-                      ))}
+                      {section.fields.map((field) => {
+                        const locked = isLocked(field.key);
+                        return (
+                          <div key={field.key}>
+                            <label className="block uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold text-[10px] mb-1 compact:mb-0.5">
+                              {field.label}
+                            </label>
+                            <input
+                              type="text"
+                              className={
+                                locked
+                                  ? `${inputClass} bg-slate-100/60 dark:bg-slate-800/60 cursor-not-allowed text-slate-500 dark:text-slate-400`
+                                  : inputClass
+                              }
+                              value={fields[field.key] || ""}
+                              onChange={(e) =>
+                                handleFieldChange(field.key, e.target.value)
+                              }
+                              readOnly={locked}
+                              tabIndex={locked ? -1 : undefined}
+                              title={locked ? "Preenchido pela coluna Paciente" : undefined}
+                              placeholder="—"
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 compact:gap-x-3 compact:gap-y-1">

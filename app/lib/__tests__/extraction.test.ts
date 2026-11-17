@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractMetrics, parseMetricsFromInputs, extractDemographics, isValidSex } from "../extraction";
+import { extractMetrics, parseMetricsFromInputs, extractDemographics, isValidSex, validateInput } from "../extraction";
 
 // =============================================
 // METRIC EXTRACTION
@@ -288,5 +288,26 @@ describe("extractDemographics — birth date", () => {
   it("extracts 'nasc: 01-12-1990'", () => {
     const r = extractDemographics("nasc: 01-12-1990");
     expect(r.birthDate?.value).toBe("01-12-1990");
+  });
+});
+
+describe("anamnese multicamadas (serialized form)", () => {
+  const form = [
+    "CAMADA 0 – IDENTIFICAÇÃO & CONTEXTO",
+    "Nome: Maria Teste Silva",
+    "Sexo biológico: f",
+    "Idade: 24",
+  ].join("\n");
+
+  it("finds the name even though the next line is another field", () => {
+    expect(extractDemographics(form).name?.value).toBe("Maria Teste Silva");
+  });
+
+  it("does not report Nome as missing", () => {
+    expect(validateInput("anamnese", form).missing).not.toContain("Nome");
+  });
+
+  it("does not take a heading further down as the name", () => {
+    expect(extractDemographics("Queixa: cansaço\nPERFIL LIPÍDICO\nLDL: 130").name).toBeUndefined();
   });
 });

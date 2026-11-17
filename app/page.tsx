@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 // --- LIB IMPORTS ---
-import { extractDemographics } from "./lib/extraction";
+import { extractDemographics, isValidSex } from "./lib/extraction";
+import { ageFromBirthDate } from "./lib/birthDate";
 import { checkClinicalRules } from "./lib/clinicalRules";
 import {
   getAuditStats,
@@ -321,9 +322,10 @@ export default function Home() {
   });
 
   const {
-    isRunningAnalise, canRunAnalise, handleRunAnalise, handleStopAnalise,
-    isRunningConduta, canRunConduta, handleRunConduta, handleStopConduta,
-    isRunningReceita, canRunReceita, handleRunReceita, handleStopReceita,
+    blockedAnalise, blockedConduta, blockedReceita,
+    isRunningAnalise, handleRunAnalise, handleStopAnalise,
+    isRunningConduta, handleRunConduta, handleStopConduta,
+    isRunningReceita, handleRunReceita, handleStopReceita,
     previousOutputs, handleRestoreOutput, thinkingPreview,
   } = useGenerationWorkflow({
     inputs, outputs, setOutputs, setOriginalOutputs, setToast,
@@ -446,7 +448,7 @@ export default function Home() {
           />
         )}
 
-        <div className="relative mx-auto max-w-[1600px] h-dvh flex flex-col p-3 compact:p-2">
+        <div className="relative h-dvh flex flex-col p-3 compact:p-2">
           <div className="grid h-full gap-4 compact:gap-3" style={{ gridTemplateColumns: gridCols }}>
 
             {/* LEFT: SNAPSHOT */}
@@ -581,6 +583,11 @@ export default function Home() {
                   </div>
                   <AnamneseForm
                     value={inputs.anamnese}
+                    linked={{
+                      nome: patientProfile.name,
+                      sexo: isValidSex(patientProfile.sex) ? patientProfile.sex : "",
+                      idade: ageFromBirthDate(patientProfile.birthDate) ?? "",
+                    }}
                     onChange={(v) => setInputs((p) => ({ ...p, anamnese: v }))}
                     onImport={(f) => handleImport(f, "anamnese")}
                     isLoading={loadingImport === "anamnese"}
@@ -593,9 +600,9 @@ export default function Home() {
                 </section>
 
                 <GenerationButtons
-                  isRunningAnalise={isRunningAnalise} canRunAnalise={canRunAnalise()} onRunAnalise={handleRunAnalise} onStopAnalise={handleStopAnalise}
-                  isRunningConduta={isRunningConduta} canRunConduta={canRunConduta()} onRunConduta={handleRunConduta} onStopConduta={handleStopConduta}
-                  isRunningReceita={isRunningReceita} canRunReceita={canRunReceita()} onRunReceita={handleRunReceita} onStopReceita={handleStopReceita}
+                  isRunningAnalise={isRunningAnalise} analiseBlocked={blockedAnalise()} onRunAnalise={handleRunAnalise} onStopAnalise={handleStopAnalise}
+                  isRunningConduta={isRunningConduta} condutaBlocked={blockedConduta()} onRunConduta={handleRunConduta} onStopConduta={handleStopConduta}
+                  isRunningReceita={isRunningReceita} receitaBlocked={blockedReceita()} onRunReceita={handleRunReceita} onStopReceita={handleStopReceita}
                 />
 
                 {/* Output panels */}

@@ -219,17 +219,21 @@ export function parseMetricsFromInputs(inputs: { [key: string]: string }): Parse
 
 // --- PATIENT DEMOGRAPHICS EXTRACTION ---
 
+// Name patterns run on text whose line breaks are kept (see extractDemographics),
+// so they only match spaces/tabs, never "\n": a name ends at the end of its line.
 const NAME_PATTERNS = [
   // "Nome:" or "Paciente:" followed by name
-  { regex: /(?:nome|paciente)\s*(?:completo|do\s*paciente)?[:\s]+([A-Za-zÀ-ÿ'\-\s]{3,60})(?=[,;|\n]|\s+\d|\s*$)/i, name: "labeled-name" },
+  { regex: /(?:nome|paciente)[ \t]*(?:completo|do[ \t]*paciente)?[: \t]+([A-Za-zÀ-ÿ'\- \t]{3,60})(?=[,;|\n]|[ \t]+\d|[ \t]*$)/im, name: "labeled-name" },
   // Name in identification blocks
-  { regex: /(?:identificação|dados\s*pessoais)[\s\S]{0,50}?nome[:\s]+([A-Za-zÀ-ÿ'\-\s]{3,60})(?=[,;|\n]|\s+\d)/i, name: "id-block-name" },
+  { regex: /(?:identificação|dados\s*pessoais)[\s\S]{0,50}?nome[: \t]+([A-Za-zÀ-ÿ'\- \t]{3,60})(?=[,;|\n]|[ \t]+\d)/i, name: "id-block-name" },
+  // Unlabeled formats only at the very start of the text, so a section heading
+  // further down ("PERFIL LIPÍDICO") is never mistaken for a name.
   // "Name, Age anos" format
-  { regex: /^([A-Za-zÀ-ÿ'\-\s]{3,60})\s*,\s*\d+\s*anos/im, name: "name-age-format" },
+  { regex: /^([A-Za-zÀ-ÿ'\- \t]{3,60})[ \t]*,[ \t]*\d+[ \t]*anos/i, name: "name-age-format" },
   // Title case full name at line start (2-4 words)
-  { regex: /^([A-ZÀ-Ú][a-zà-ÿ']+(?:\s+(?:de|da|do|dos|das|e)\s+)?[A-ZÀ-Ú][a-zà-ÿ']+(?:\s+[A-ZÀ-Ú][a-zà-ÿ']+){0,2})\s*(?:[,\n]|$)/m, name: "title-case-name" },
+  { regex: /^([A-ZÀ-Ú][a-zà-ÿ']+(?:[ \t]+(?:de|da|do|dos|das|e)[ \t]+)?[A-ZÀ-Ú][a-zà-ÿ']+(?:[ \t]+[A-ZÀ-Ú][a-zà-ÿ']+){0,2})[ \t]*(?:[,\n]|$)/, name: "title-case-name" },
   // ALL CAPS name (2-4 words)
-  { regex: /^([A-ZÀ-Ú][A-ZÀ-Ú'\-]+(?:\s+(?:DE|DA|DO|DOS|DAS|E)\s+)?[A-ZÀ-Ú][A-ZÀ-Ú'\-]+(?:\s+[A-ZÀ-Ú][A-ZÀ-Ú'\-]+){0,2})\s*(?:[,\n]|$)/m, name: "uppercase-name" },
+  { regex: /^([A-ZÀ-Ú][A-ZÀ-Ú'\-]+(?:[ \t]+(?:DE|DA|DO|DOS|DAS|E)[ \t]+)?[A-ZÀ-Ú][A-ZÀ-Ú'\-]+(?:[ \t]+[A-ZÀ-Ú][A-ZÀ-Ú'\-]+){0,2})[ \t]*(?:[,\n]|$)/, name: "uppercase-name" },
 ];
 
 const AGE_PATTERNS = [
@@ -295,9 +299,12 @@ export function extractDemographics(text: string): PatientDemographics {
   const correctedText = correctOcrErrors(text);
   const results: PatientDemographics = {};
 
-  // Extract name
+  // Extract name. Not from correctedText: that collapses line breaks, so in
+  // structured text ("Nome: X\nSexo biológico: Y\n...") the name would run
+  // into the next field and never match.
+  const nameText = text.replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ");
   for (const pattern of NAME_PATTERNS) {
-    const match = correctedText.match(pattern.regex);
+    const match = nameText.match(pattern.regex);
     if (match && match[1]) {
       const normalized = normalizeName(match[1]);
       if (isValidName(normalized)) {

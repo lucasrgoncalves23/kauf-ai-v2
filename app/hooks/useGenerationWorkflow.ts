@@ -81,18 +81,27 @@ export function useGenerationWorkflow({
   const condutaAbortRef = useRef<AbortController | null>(null);
   const receitaAbortRef = useRef<AbortController | null>(null);
 
-  // Validation functions
-  function canRunAnalise(): boolean {
-    return inputs.anamnese.trim().length > 0 && isValidSex(patientSex);
+  // Why each step can't run yet (null = it can). Shown under the disabled
+  // button, since a disabled button can't be clicked to show a toast.
+  function blockedAnalise(): string | null {
+    const missing: string[] = [];
+    if (!inputs.anamnese.trim()) missing.push("anamnese");
+    if (!isValidSex(patientSex)) missing.push("sexo do paciente");
+    return missing.length ? `Falta ${missing.join(" e ")}` : null;
   }
 
-  function canRunConduta(): boolean {
-    return inputs.anamnese.trim().length > 0 && isValidSex(patientSex);
+  const blockedConduta = blockedAnalise;
+
+  function blockedReceita(): string | null {
+    if (!outputs.conduta.trim()) return "Falta a Conduta";
+    const violations = checkClinicalRules(outputs.conduta, patientSex);
+    if (violations.length > 0) return `Conduta contém "${violations[0].matchedTerm}" (regra ${violations[0].rule.id})`;
+    return null;
   }
 
-  function canRunReceita(): boolean {
-    return outputs.conduta.trim().length > 0 && checkClinicalRules(outputs.conduta, patientSex).length === 0;
-  }
+  const canRunAnalise = () => blockedAnalise() === null;
+  const canRunConduta = () => blockedConduta() === null;
+  const canRunReceita = () => blockedReceita() === null;
 
   // --- ANALISE ---
   async function handleRunAnalise() {
@@ -347,6 +356,10 @@ export function useGenerationWorkflow({
   }
 
   return {
+    // Why a step is blocked (null when it can run)
+    blockedAnalise,
+    blockedConduta,
+    blockedReceita,
     // Analise
     isRunningAnalise,
     canRunAnalise,
