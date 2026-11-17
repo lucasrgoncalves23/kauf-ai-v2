@@ -18,6 +18,34 @@ const inputClass =
 const labelClass =
   "block text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1 font-semibold";
 
+const SEX_OPTIONS = ["Feminino", "Masculino"] as const;
+
+/** Seletor de dois botões. Tocar na opção já escolhida limpa o campo. */
+function SexToggle({ value, onChange }: { value: string; onChange: (sex: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white/50 dark:bg-slate-700/50 p-1">
+      {SEX_OPTIONS.map((option) => {
+        const active = value === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(active ? "" : option)}
+            className={`rounded-md px-2 py-1.5 text-xs font-medium transition-all outline-none focus-visible:ring-2 focus-visible:ring-brand-300 compact:py-1 ${
+              active
+                ? "bg-brand-600 text-white shadow-sm"
+                : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600/60 hover:text-slate-700 dark:hover:text-slate-200"
+            }`}
+          >
+            {option}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotProps) {
   const derivedAge = ageFromBirthDate(profile.birthDate);
 
@@ -51,15 +79,10 @@ export function PatientSnapshot({ profile, onProfileChange }: PatientSnapshotPro
           </div>
           <div>
             <label className={labelClass}>Sexo</label>
-            <select
-              className={inputClass}
+            <SexToggle
               value={isValidSex(profile.sex) ? profile.sex : ""}
-              onChange={(e) => onProfileChange({ ...profile, sex: e.target.value })}
-            >
-              <option value="">— Selecionar —</option>
-              <option value="Masculino">Masculino</option>
-              <option value="Feminino">Feminino</option>
-            </select>
+              onChange={(sex) => onProfileChange({ ...profile, sex })}
+            />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 compact:gap-2">
