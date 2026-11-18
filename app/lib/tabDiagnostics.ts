@@ -16,6 +16,8 @@ const CURRENT_KEY = "kai-tab-diag";
 const PENDING_KEY = "kai-tab-diag-pending";
 const MAX_EVENTS = 40;
 const MAX_PENDING = 5;
+const DEVICE_KEY = "kai-tab-diag-device";
+const HEARTBEAT_MS = 15_000;
 
 type DiagEvent = {
   t: number; // ms since page start
@@ -27,7 +29,12 @@ type DiagEvent = {
 
 export type DiagSession = {
   id: string;
+  /** Random per-browser id, so sessions from different machines can be told apart (Safari's UA is frozen) */
+  device: string;
+  host: string;
   startedAt: string;
+  /** ms since page start when the page's JS last ran: tells a killed tab from one that kept running out of sight */
+  lastAlive: number;
   ua: string;
   historyLength: number;
   referrer: string;
@@ -79,10 +86,24 @@ export function installTabDiagnostics(): void {
   if (previous?.id && !pending.some((s) => s.id === previous.id)) pending.push(previous);
   writeJson(PENDING_KEY, pending.slice(-MAX_PENDING));
 
+  let device = "";
+  try {
+    device = localStorage.getItem(DEVICE_KEY) || "";
+    if (!device) {
+      device = Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(DEVICE_KEY, device);
+    }
+  } catch {
+    /* storage blocked */
+  }
+
   const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
   const session: DiagSession = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    device,
+    host: location.host,
     startedAt: new Date().toISOString(),
+    lastAlive: 0,
     ua: navigator.userAgent,
     historyLength: history.length,
     referrer: document.referrer,
@@ -101,6 +122,7 @@ export function installTabDiagnostics(): void {
       ...(detail ? { detail } : {}),
     });
     if (session.events.length > MAX_EVENTS) session.events.splice(0, session.events.length - MAX_EVENTS);
+    session.lastAlive = Math.round(performance.now());
     writeJson(CURRENT_KEY, session);
   };
 
@@ -115,6 +137,15 @@ export function installTabDiagnostics(): void {
   };
 
   record("boot", `history=${history.length}`);
+  // Register the session right away, so a device shows up even if it never reports an ending
+  flushCurrent();
+
+  // Heartbeat: if the tab vanishes without any unload event, this shows whether its JS died
+  // at that moment or kept running (tab moved to another window / tab group)
+  window.setInterval(() => {
+    session.lastAlive = Math.round(performance.now());
+    writeJson(CURRENT_KEY, session);
+  }, HEARTBEAT_MS);
 
   window.addEventListener("blur", () => record("blur"));
   window.addEventListener("focus", () => record("focus"));
