@@ -7,7 +7,10 @@ import { useDictation } from "../hooks/useDictation";
 
 // --- Section Definitions ---
 
-type FieldDef = { key: string; label: string };
+// hidden: not shown in the form, but still parsed and serialized so its value
+// (filled from the Paciente column) keeps reaching the prompts via the
+// anamnese text. wide: spans both grid columns.
+type FieldDef = { key: string; label: string; hidden?: boolean; wide?: boolean };
 type FieldSection = { num: number; title: string; type: "fields"; fields: FieldDef[] };
 type CheckboxSection = { num: number; title: string; type: "checkbox"; options: string[] };
 type Section = FieldSection | CheckboxSection;
@@ -18,16 +21,16 @@ const SECTIONS: Section[] = [
     title: "IDENTIFICAÇÃO & CONTEXTO",
     type: "fields",
     fields: [
-      { key: "nome", label: "Nome" },
-      { key: "sexo", label: "Sexo biológico" },
-      { key: "idade", label: "Idade" },
+      { key: "nome", label: "Nome", hidden: true },
+      { key: "sexo", label: "Sexo biológico", hidden: true },
+      { key: "idade", label: "Idade", hidden: true },
       { key: "altura", label: "Altura" },
       { key: "peso", label: "Peso" },
       { key: "profissao", label: "Profissão" },
       { key: "rotinaTrabalho", label: "Rotina de trabalho" },
       { key: "estadoCivil", label: "Estado civil" },
       { key: "filhos", label: "Filhos" },
-      { key: "objetivoPrincipal", label: "Objetivo principal" },
+      { key: "objetivoPrincipal", label: "Objetivo principal", wide: true },
     ],
   },
   {
@@ -293,15 +296,13 @@ function parseNotes(text: string): string {
 // --- Component ---
 
 /**
- * C0 fields that mirror the Paciente column. A non-empty value here is
+ * C0 fields that mirror the Paciente column. They are hidden in the form (the
+ * left column is where the doctor edits them), but a non-empty value here is
  * written into the field whenever it changes on the left (and after a session
- * restore). Sexo and Idade are then read-only, since the left column is their
- * source (the sex selection gates generation; age comes from the birth date).
- * Nome stays editable: the page copies an anamnese "Nome:" back to the left.
+ * restore), so the serialized anamnese keeps its "Nome:", "Sexo biológico:"
+ * and "Idade:" lines — the generation prompts read name and age from them.
  */
 export type LinkedFields = Partial<Record<"nome" | "sexo" | "idade", string>>;
-
-const LOCKED_WHEN_LINKED = new Set(["sexo", "idade"]);
 
 export type AnamneseFormProps = {
   value: string;
@@ -369,9 +370,6 @@ export function AnamneseForm({
     emitChange(next, checks, notes);
   }, [linkedNome, linkedSexo, linkedIdade, fields, checks, notes, emitChange]);
 
-  const isLocked = (key: string) =>
-    LOCKED_WHEN_LINKED.has(key) && !!linked?.[key as keyof LinkedFields]?.trim();
-
   const handleFieldChange = (key: string, val: string) => {
     const next = { ...fields, [key]: val };
     setFields(next);
@@ -430,10 +428,8 @@ export function AnamneseForm({
     if (section.type === "checkbox") {
       return [(checks[section.num] || []).length, section.options.length];
     }
-    return [
-      section.fields.filter((f) => fields[f.key]?.trim()).length,
-      section.fields.length,
-    ];
+    const visible = section.fields.filter((f) => !f.hidden);
+    return [visible.filter((f) => fields[f.key]?.trim()).length, visible.length];
   };
 
   const inputClass =
@@ -533,32 +529,22 @@ export function AnamneseForm({
                 <div className="px-3 pb-3 pt-1 compact:px-2 compact:pb-2">
                   {section.type === "fields" ? (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 compact:gap-x-3 compact:gap-y-1.5">
-                      {section.fields.map((field) => {
-                        const locked = isLocked(field.key);
-                        return (
-                          <div key={field.key}>
-                            <label className="block uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold text-[10px] mb-1 compact:mb-0.5">
-                              {field.label}
-                            </label>
-                            <input
-                              type="text"
-                              className={
-                                locked
-                                  ? `${inputClass} bg-slate-100/60 dark:bg-slate-800/60 cursor-not-allowed text-slate-500 dark:text-slate-400`
-                                  : inputClass
-                              }
-                              value={fields[field.key] || ""}
-                              onChange={(e) =>
-                                handleFieldChange(field.key, e.target.value)
-                              }
-                              readOnly={locked}
-                              tabIndex={locked ? -1 : undefined}
-                              title={locked ? "Preenchido pela coluna Paciente" : undefined}
-                              placeholder="—"
-                            />
-                          </div>
-                        );
-                      })}
+                      {section.fields.filter((field) => !field.hidden).map((field) => (
+                        <div key={field.key} className={field.wide ? "col-span-2" : undefined}>
+                          <label className="block uppercase tracking-wide text-slate-400 dark:text-slate-500 font-semibold text-[10px] mb-1 compact:mb-0.5">
+                            {field.label}
+                          </label>
+                          <input
+                            type="text"
+                            className={inputClass}
+                            value={fields[field.key] || ""}
+                            onChange={(e) =>
+                              handleFieldChange(field.key, e.target.value)
+                            }
+                            placeholder="—"
+                          />
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 compact:gap-x-3 compact:gap-y-1">
