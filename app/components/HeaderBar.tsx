@@ -130,15 +130,13 @@ export function HeaderBar({
                   onClick={onExportClinical}
                   className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <div className="font-medium">Versão Clínica</div>
-                  <div className="text-2xs text-slate-400 dark:text-slate-500">Relatório completo técnico</div>
+                  <div className="font-medium">Relatório completo</div>
                 </button>
                 <button
                   onClick={onExportPrescription}
                   className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                 >
                   <div className="font-medium">Receita</div>
-                  <div className="text-2xs text-slate-400 dark:text-slate-500">Prescrição para farmácia</div>
                 </button>
               </div>
             </>
