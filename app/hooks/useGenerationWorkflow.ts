@@ -81,13 +81,12 @@ export function useGenerationWorkflow({
   const condutaAbortRef = useRef<AbortController | null>(null);
   const receitaAbortRef = useRef<AbortController | null>(null);
 
-  // Why each step can't run yet (null = it can). Shown under the disabled
-  // button, since a disabled button can't be clicked to show a toast.
+  // Why each step can't run yet (null = it can). Shown when hovering the
+  // disabled button, since a disabled button can't be clicked to show a toast.
   function blockedAnalise(): string | null {
-    const missing: string[] = [];
-    if (!inputs.anamnese.trim()) missing.push("anamnese");
-    if (!isValidSex(patientSex)) missing.push("sexo do paciente");
-    return missing.length ? `Falta ${missing.join(" e ")}` : null;
+    if (!inputs.anamnese.trim()) return "Preencha os inputs primeiro";
+    if (!isValidSex(patientSex)) return "Selecione o sexo do paciente";
+    return null;
   }
 
   const blockedConduta = blockedAnalise;

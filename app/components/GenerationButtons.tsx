@@ -5,19 +5,19 @@ import { Square } from "lucide-react";
 type GenerationButtonsProps = {
   // Análise
   isRunningAnalise: boolean;
-  /** Why it can't run yet ("Falta anamnese"), or null when it can */
+  /** Why it can't run yet (shown on hover), or null when it can */
   analiseBlocked: string | null;
   onRunAnalise: () => void;
   onStopAnalise: () => void;
   // Conduta
   isRunningConduta: boolean;
-  /** Why it can't run yet ("Falta anamnese"), or null when it can */
+  /** Why it can't run yet (shown on hover), or null when it can */
   condutaBlocked: string | null;
   onRunConduta: () => void;
   onStopConduta: () => void;
   // Receita
   isRunningReceita: boolean;
-  /** Why it can't run yet ("Falta anamnese"), or null when it can */
+  /** Why it can't run yet (shown on hover), or null when it can */
   receitaBlocked: string | null;
   onRunReceita: () => void;
   onStopReceita: () => void;
@@ -49,22 +49,34 @@ function RunButton({ label, isRunning, blockedReason, onRun, onStop, activeClass
       </div>
     );
   }
-  const blocked = !!blockedReason;
+  if (blockedReason) {
+    // The reason appears only while hovering the greyed-out button. The hover
+    // target is the wrapper (the button ignores the pointer) because some
+    // browsers don't register hover on disabled buttons.
+    return (
+      <div className="relative flex flex-col items-center">
+        <span className="peer cursor-not-allowed">
+          <button disabled className={`${disabledClass} pointer-events-none`}>
+            <span>{label}</span>
+          </button>
+        </span>
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute top-full z-10 mt-1.5 whitespace-nowrap text-2xs font-medium text-amber-600 dark:text-amber-400 opacity-0 transition-opacity peer-hover:opacity-100"
+        >
+          {blockedReason}
+        </span>
+      </div>
+    );
+  }
   return (
-    <div className="flex flex-col items-center gap-1.5 compact:gap-1">
+    <div className="flex flex-col items-center">
       <button
         onClick={onRun}
-        disabled={blocked}
-        title={blockedReason ?? undefined}
-        className={blocked ? disabledClass : `${baseClass} ${activeClass} text-white hover:-translate-y-0.5 hover:shadow-xl`}
+        className={`${baseClass} ${activeClass} text-white hover:-translate-y-0.5 hover:shadow-xl`}
       >
         <span>{label}</span>
       </button>
-      {blocked && (
-        <span className="max-w-[16rem] text-center text-2xs font-medium text-amber-600 dark:text-amber-400">
-          {blockedReason}
-        </span>
-      )}
     </div>
   );
 }
