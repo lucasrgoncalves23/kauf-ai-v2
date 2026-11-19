@@ -9,6 +9,8 @@ import {
   ChevronDown,
   Download,
   Eraser,
+  FileText,
+  Pill,
   Settings,
 } from "lucide-react";
 import { Spinner } from "./ui";
@@ -125,18 +127,25 @@ export function HeaderBar({
           {showExportDropdown && (
             <>
               <div className="fixed inset-0 z-40" onClick={onToggleExportDropdown} />
-              <div className="absolute right-0 mt-2 w-52 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-50 animate-scale-in">
+              <div
+                role="menu"
+                className="absolute right-0 mt-1.5 min-w-full w-max bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 p-1 z-50 animate-scale-in"
+              >
                 <button
+                  role="menuitem"
                   onClick={onExportClinical}
-                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium whitespace-nowrap text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <div className="font-medium">Relatório completo</div>
+                  <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                  Relatório completo
                 </button>
                 <button
+                  role="menuitem"
                   onClick={onExportPrescription}
-                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium whitespace-nowrap text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
-                  <div className="font-medium">Receita</div>
+                  <Pill className="w-3.5 h-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                  Receita
                 </button>
               </div>
             </>
