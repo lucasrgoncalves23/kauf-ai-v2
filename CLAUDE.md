@@ -46,7 +46,7 @@ All API routes require the `X-Clinic-Pin` header, verified server-side by [auth.
 ## AI Pipeline
 
 - [anthropic.ts](app/lib/anthropic.ts) — shared SDK client (`getAnthropicClient`), `cachedSystem()` (prompt-cache system blocks), `streamToSSE()` (re-encodes SDK stream as `data: {"text"}` SSE; emits `data: {"error"}` on `max_tokens`/`refusal` stop reasons), `messageText()` (extracts text block, skipping thinking blocks).
-- [prompts.ts](app/lib/prompts.ts) — the generation builders (analise, conduta, receita) return a single user-message string: the June 2026 production prompts, restored verbatim at the clinic's request (plus the approved 30-day diet/training additions in the conduta). Do NOT restructure them into system/user or "improve" their wording without the doctor's sign-off — output quality regressed the last time this was done. The chat and patient-pdf builders still return `{ system, user }` for prompt caching.
+- [prompts.ts](app/lib/prompts.ts) — the generation builders (analise, conduta, receita) return a single user-message string: the June 2026 production prompts, restored verbatim at the clinic's request (plus the approved 30-day diet/training additions in the conduta). Do NOT restructure them into system/user or "improve" their wording without the doctor's sign-off — output quality regressed the last time this was done. The chat and portal builders still return `{ system, user }` for prompt caching.
 - Streaming routes (`generate-analise`, `generate-conduta`, `generate-prescription`) use `client.messages.stream(..., { signal: req.signal })` so client aborts cancel the upstream call, with `max_tokens: 8192`, `temperature: 0.3`, no system block, no thinking — the June production configuration. AI routes set `maxDuration = 300` (clamped to 60s on the free Vercel plan).
 - Client-side, [stream.ts](app/utils/stream.ts) `processStream()` accumulates chunks and **throws** if the server emitted an error event (truncation/refusal) — hooks surface it as a toast while keeping partial text visible. It also handles optional `{"thinking"}` preview chunks; Sonnet 4.5 never emits them, so the preview UI simply stays hidden.
 - Model migration warning: `claude-sonnet-5` was tried in July 2026 and rolled back — its always-on adaptive thinking consumed the token budget/time limit on large inputs (silent empty outputs) and it rejects `temperature`. Do not re-upgrade the model without testing against a 60+ page exam input on the production Vercel plan.
@@ -85,7 +85,6 @@ The production engine is client-side: [useEngineStatus.ts](app/hooks/useEngineSt
 | `/api/generate-analise` | Streamed clinical analysis (SSE) |
 | `/api/generate-conduta` | Streamed 9-module treatment plan (SSE) |
 | `/api/generate-prescription` | Streamed receituário extraction from conduta (SSE) |
-| `/api/generate-patient-pdf` | Patient-friendly plan (non-streaming) |
 | `/api/chat-assistant` | KAUAI copilot; replies may embed multiple `:::COMMAND:::` JSON blocks (`edit` find/replace, `append`, `set`) targeting analise/conduta/receita |
 | `/api/import-pdf` | PDF/image OCR (pdf-parse fast path → Claude Vision fallback) |
 | `/api/condense-exam` | Haiku extraction pass: distills oversized exam text into a structured summary before generation (called invisibly by [condense.ts](app/lib/condense.ts); falls back to raw text on failure) |

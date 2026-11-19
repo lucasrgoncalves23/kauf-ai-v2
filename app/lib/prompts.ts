@@ -3,7 +3,7 @@
 //
 // The generation builders (analise, conduta, receita) return a single
 // user-message string — the June 2026 production configuration that the
-// clinic validated. The chat and patient-pdf builders return { system, user }
+// clinic validated. The chat and portal builders return { system, user }
 // so their static templates hit the prompt cache.
 // ============================================
 
@@ -350,61 +350,6 @@ export function buildCondensePrompt(section: string, text: string): BuiltPrompt 
   return {
     system: CONDENSE_SYSTEM,
     user: `SEÇÃO DO PRONTUÁRIO: ${section}\n\nDOCUMENTO ORIGINAL:\n${text}`,
-  };
-}
-
-const PATIENT_PDF_SYSTEM = `
-Você transforma relatórios clínicos em um resumo curto para o paciente levar para casa.
-
-O PACIENTE:
-- Não é médico. Não sabe o que é "TSH", "HOMA-IR", "cortisol salivar".
-- Quer saber: O que eu tenho? O que eu faço? O que eu tomo e quando?
-- Não quer saber: raciocínio clínico, valores laboratoriais, justificativas científicas.
-
-COMO ESCREVER:
-- Linguagem cotidiana, como se o médico estivesse explicando pessoalmente.
-- Traduza termos técnicos: "sua tireoide está um pouco lenta" em vez de "hipotireoidismo subclínico".
-- Seja direto mas humano. Não infantilize.
-- Frases curtas. Sem floreios, sem motivação genérica ("você está no caminho certo!").
-- MÁXIMO 2 páginas (≈800 palavras). Menos é melhor.
-- PROIBIDO: markdown (#, ##, **, *, -), siglas técnicas, listas de exames, valores numéricos de laboratório.
-
-O QUE INCLUIR (nesta ordem):
-
-[NOME DO PACIENTE]
-
----
-
-O QUE A AVALIAÇÃO MOSTROU
-Em 3-5 frases simples, o que está indo bem e o que precisa de atenção. Sem números de exame — traduza em linguagem que o paciente entenda ("seu sono está prejudicando sua recuperação", "seu nível de açúcar no sangue está um pouco alto").
-
----
-
-O QUE FAZER NO DIA A DIA
-Apenas o que muda na rotina do paciente. Agrupe por momento do dia ou por prioridade, não por categoria clínica. Exemplo: "De manhã: tomar X em jejum, caminhar 30 min" — não seções separadas de "sono", "exercício", "alimentação" se as instruções forem poucas. Use seções separadas só se houver bastante conteúdo em cada uma.
-
----
-
-O QUE TOMAR
-Nome do suplemento ou medicamento, dose, e quando tomar. Um por linha. Sem explicar para que serve — o médico já explicou na consulta. Se a lista for longa, agrupe por horário (manhã/almoço/noite).
-
-COMECE DIRETAMENTE COM O NOME DO PACIENTE.
-`.trim();
-
-export function buildPatientPdfPrompt(
-  analise: string,
-  conduta: string,
-  patientName: string
-): BuiltPrompt {
-  return {
-    system: PATIENT_PDF_SYSTEM,
-    user: `PACIENTE: ${patientName || "PACIENTE"}
-
-=== ANÁLISE ===
-${analise || "(não fornecida)"}
-
-=== CONDUTA ===
-${conduta || "(não fornecida)"}`,
   };
 }
 

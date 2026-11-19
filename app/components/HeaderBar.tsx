@@ -16,9 +16,7 @@ import { Spinner } from "./ui";
 type HeaderBarProps = {
   showExportDropdown: boolean;
   onToggleExportDropdown: () => void;
-  isGeneratingPatientPdf: boolean;
   onExportClinical: () => void;
-  onExportPatient: () => void;
   onExportPrescription: () => void;
   onClearSession: () => void;
   onOpenSettings: () => void;
@@ -40,9 +38,7 @@ const SAVE_STATUS_UI = {
 export function HeaderBar({
   showExportDropdown,
   onToggleExportDropdown,
-  isGeneratingPatientPdf,
   onExportClinical,
-  onExportPatient,
   onExportPrescription,
   onClearSession,
   onOpenSettings,
@@ -118,27 +114,13 @@ export function HeaderBar({
         <div className="relative">
           <button
             onClick={onToggleExportDropdown}
-            disabled={isGeneratingPatientPdf}
             title="Exportar PDF"
             aria-label="Exportar PDF"
-            className={`flex items-center gap-2 px-3 @min-[860px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-lg shadow-slate-200 dark:shadow-slate-900/30 ${
-              isGeneratingPatientPdf
-                ? "bg-slate-300 text-slate-500 cursor-wait"
-                : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-white"
-            }`}
+            className="flex items-center gap-2 px-3 @min-[860px]:px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shadow-lg shadow-slate-200 dark:shadow-slate-900/30 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-white"
           >
-            {isGeneratingPatientPdf ? (
-              <>
-                <Spinner />
-                <span className="hidden @min-[860px]:inline">Gerando...</span>
-              </>
-            ) : (
-              <>
-                <Download className="w-3.5 h-3.5 @min-[860px]:hidden" />
-                <span className="hidden @min-[860px]:inline">Exportar PDF</span>
-                <ChevronDown className="hidden @min-[860px]:block w-3.5 h-3.5" />
-              </>
-            )}
+            <Download className="w-3.5 h-3.5 @min-[860px]:hidden" />
+            <span className="hidden @min-[860px]:inline">Exportar PDF</span>
+            <ChevronDown className="hidden @min-[860px]:block w-3.5 h-3.5" />
           </button>
           {showExportDropdown && (
             <>
@@ -150,13 +132,6 @@ export function HeaderBar({
                 >
                   <div className="font-medium">Versão Clínica</div>
                   <div className="text-2xs text-slate-400 dark:text-slate-500">Relatório completo técnico</div>
-                </button>
-                <button
-                  onClick={onExportPatient}
-                  className="w-full text-left px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <div className="font-medium">Versão Paciente</div>
-                  <div className="text-2xs text-slate-400 dark:text-slate-500">Linguagem simplificada</div>
                 </button>
                 <button
                   onClick={onExportPrescription}

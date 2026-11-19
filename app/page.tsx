@@ -335,15 +335,15 @@ export default function Home() {
 
   const {
     showExportDropdown, setShowExportDropdown,
-    isGeneratingPatientPdf, patientPdfContent, prescriptionContent,
-    handleExportClinical, handleExportPatient, handleExportPrescription,
+    prescriptionContent,
+    handleExportClinical, handleExportPrescription,
   } = useExportHandlers({
     outputs, currentPatientId, patientName: patientProfile.name, patientSex: patientProfile.sex, setToast,
   });
 
   // Ask before the tab closes/reloads while a generation, import or PDF build is running
   useUnloadGuard(
-    isRunningAnalise || isRunningConduta || isRunningReceita || !!loadingImport || isGeneratingPatientPdf
+    isRunningAnalise || isRunningConduta || isRunningReceita || !!loadingImport
   );
 
   // --- EFFECTS ---
@@ -541,9 +541,7 @@ export default function Home() {
               <HeaderBar
                 showExportDropdown={showExportDropdown}
                 onToggleExportDropdown={() => setShowExportDropdown(!showExportDropdown)}
-                isGeneratingPatientPdf={isGeneratingPatientPdf}
                 onExportClinical={handleExportClinical}
-                onExportPatient={handleExportPatient}
                 onExportPrescription={handleExportPrescription}
                 onClearSession={() => {
                   // Switch to an unsaved blank draft rather than blanking the current
@@ -758,7 +756,7 @@ export default function Home() {
         </div>
       </div>
 
-      <MedicalReportPrint profile={patientProfile} outputs={outputs} patientVersion={patientPdfContent} prescriptionVersion={prescriptionContent} />
+      <MedicalReportPrint profile={patientProfile} outputs={outputs} prescriptionVersion={prescriptionContent} />
     </>
   );
 }
