@@ -1,7 +1,5 @@
 import { useState } from "react";
 import { logExport, logRuleViolation } from "../lib/audit";
-import { getPinHeaders } from "../lib/api-client";
-import { logger } from "../lib/logger";
 import { checkClinicalRules, type RuleViolation } from "../lib/clinicalRules";
 import type { ClinicalOutputs, ToastState } from "../types/clinical";
 import type { GenerationSource } from "../lib/audit";
@@ -22,8 +20,6 @@ export function useExportHandlers({
   setToast,
 }: ExportHandlersOptions) {
   const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const [isGeneratingPatientPdf, setIsGeneratingPatientPdf] = useState(false);
-  const [patientPdfContent, setPatientPdfContent] = useState<string | null>(null);
   const [prescriptionContent, setPrescriptionContent] = useState<string | null>(null);
 
   // Blocks export if the relevant document(s) violate a deterministic clinical
@@ -75,74 +71,6 @@ export function useExportHandlers({
     window.print();
   }
 
-  // Generate and export patient-friendly PDF
-  async function handleExportPatient() {
-    if (blockedByRuleViolation([
-      { field: "analise", text: outputs.analise },
-      { field: "conduta", text: outputs.conduta },
-    ])) return;
-
-    setShowExportDropdown(false);
-
-    if (!outputs.analise && !outputs.conduta) {
-      setToast({ message: "Gere a Análise ou Conduta primeiro", type: "error" });
-      return;
-    }
-
-    const controller = new AbortController();
-    setIsGeneratingPatientPdf(true);
-    setToast({
-      message: "Gerando versão para paciente...",
-      type: "info",
-      onCancel: () => controller.abort(),
-    });
-
-    try {
-      const res = await fetch("/api/generate-patient-pdf", {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json", ...getPinHeaders() },
-        body: JSON.stringify({
-          analise: outputs.analise,
-          conduta: outputs.conduta,
-          patientName: patientName || "Paciente",
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Falha ao gerar PDF");
-
-      setPatientPdfContent(data.text);
-      setToast(null);
-
-      logExport({
-        patientId: currentPatientId,
-        patientName,
-        format: "patient",
-        content: {
-          analise: outputs.analise,
-          conduta: outputs.conduta,
-        },
-      });
-
-      // Small delay to allow state update, then print
-      setTimeout(() => {
-        window.print();
-        // Clear after printing
-        setTimeout(() => setPatientPdfContent(null), 1000);
-      }, 100);
-    } catch (err: any) {
-      if (controller.signal.aborted) {
-        setToast({ message: "Geração cancelada", type: "info" });
-        return;
-      }
-      logger.error("Patient PDF export failed", { error: err.message });
-      setToast({ message: "Erro: " + err.message, type: "error" });
-    } finally {
-      setIsGeneratingPatientPdf(false);
-    }
-  }
-
   // Generate and export prescription PDF
   function handleExportPrescription() {
     if (blockedByRuleViolation([{ field: "receita", text: outputs.receita }])) return;
@@ -177,11 +105,8 @@ export function useExportHandlers({
   return {
     showExportDropdown,
     setShowExportDropdown,
-    isGeneratingPatientPdf,
-    patientPdfContent,
     prescriptionContent,
     handleExportClinical,
-    handleExportPatient,
     handleExportPrescription,
   };
 }

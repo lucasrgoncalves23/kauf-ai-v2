@@ -6,14 +6,12 @@ import type { PatientProfile, ClinicalOutputs } from "../types/clinical";
 type MedicalReportPrintProps = {
   profile: PatientProfile;
   outputs: ClinicalOutputs;
-  patientVersion: string | null;
   prescriptionVersion: string | null;
 };
 
 export function MedicalReportPrint({
   profile,
   outputs,
-  patientVersion,
   prescriptionVersion,
 }: MedicalReportPrintProps) {
   const [dateStr, setDateStr] = useState("");
@@ -30,7 +28,7 @@ export function MedicalReportPrint({
       })
     );
     setReportId(Math.random().toString(36).slice(2, 8).toUpperCase());
-  }, [patientVersion, prescriptionVersion]);
+  }, [prescriptionVersion]);
 
   // Prescription version
   if (prescriptionVersion) {
@@ -76,45 +74,6 @@ export function MedicalReportPrint({
           </div>
           <p className="text-[10px] text-slate-400 mt-8">
             Instituto Kaufmann — Medicina Integrativa · Documento emitido em {dateStr}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // Patient-friendly version
-  if (patientVersion) {
-    return (
-      <div className="hidden print:block bg-white text-black p-10 max-w-[210mm] mx-auto min-h-screen">
-        <div className="flex justify-between items-end border-b-2 border-teal-500 pb-4 mb-10">
-          <div>
-            <h1 className="text-3xl font-serif font-bold text-teal-800 tracking-tight">
-              Seu Plano de Saúde
-            </h1>
-            <p className="text-sm text-teal-600 mt-1 font-medium">Kauf - Medicina Integrativa</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-slate-900">{dateStr}</p>
-          </div>
-        </div>
-
-        <div className="bg-teal-50 border border-teal-100 rounded-lg p-6 mb-10">
-          <span className="block text-xl font-serif font-medium text-teal-900">
-            {profile.name || "Paciente"}
-          </span>
-        </div>
-
-        <div
-          className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap"
-          style={{ fontFamily: "Georgia, serif" }}
-        >
-          {patientVersion}
-        </div>
-
-        <div className="mt-20 pt-8 border-t border-teal-200 text-center break-inside-avoid">
-          <p className="text-[10px] text-slate-400 italic">
-            Este documento foi preparado especialmente para você. Guarde-o e traga suas dúvidas na
-            próxima consulta.
           </p>
         </div>
       </div>
